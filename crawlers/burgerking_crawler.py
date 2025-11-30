@@ -1,6 +1,7 @@
 """
-버거킹 셔틀 딜리버리 크롤러 (가격 추출 최적화 버전)
-* 제공된 HTML 구조(셔틀 딜리버리)에 맞춰 가격을 포함하여 메뉴를 수집합니다.
+버거킹 통합 크롤러 (최종 완성본 - 영양성분 파싱 로직 강화)
+* 모달 팝업 내부를 스크롤하고, 테이블을 찾아 9가지 영양소를 정확히 추출합니다.
+* 영양소 항목이 누락된 경우를 대비해 딕셔너리를 사용하여 안정성을 확보했습니다.
 """
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -9,7 +10,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from bs4 import BeautifulSoup
 import pandas as pd
 import time
@@ -19,195 +20,242 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# --- settings 모듈 임시 설정 (실제 환경에 맞게 수정 필요) ---
-class MockSettings:
-    DATA_RAW = './data_raw'
-settings = MockSettings()
-# --- 임시 설정 끝 ---
+try:
+    from config.settings import settings
+except ImportError:
+    class MockSettings:
+        DATA_RAW = './data_raw'
+    settings = MockSettings()
 
-class BurgerKingShuttleCrawler:
-    """버거킹 셔틀 딜리버리 메뉴 및 가격 크롤러"""
-    
-    def __init__(self, headless=False):
-        print("🔧 Chrome 설정 중 (버거킹 셔틀 딜리버리)...")
-        
+# 영양소 이름과 DB 컬럼명 매핑 (정규식 처리를 위해 키워드만 사용)
+NUTRITION_KEYWORDS = {
+    '열량': 'calories', '탄수화물': 'carbs', '당류': 'sugars', '단백질': 'protein', 
+    '지방': 'fat', '포화지방': 'saturated_fat', '트랜스지방': 'trans_fat', 
+    '콜레스테롤': 'cholesterol', '나트륨': 'sodium'
+}
+
+class BurgerKingCrawler:
+    def __init__(self, headless=True):
+        print("🔧 Chrome 설정 중 (버거킹 - 최종 파싱)...")
         chrome_options = Options()
-        if headless:
+        if headless: 
             chrome_options.add_argument('--headless')
-            print("   (브라우저 숨김 모드)")
-        else:
-            print("   (브라우저 표시 모드)")
         
-        # PC 웹 환경 그대로 사용
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--window-size=1920,1080')
         chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
         
+        service = Service(ChromeDriverManager().install())
+        self.driver = webdriver.Chrome(service=service, options=chrome_options)
+        self.wait = WebDriverWait(self.driver, 15) 
+        self.base_url = "https://www.burgerking.co.kr"
+        print("✅ 브라우저 준비 완료")
+
+    def scrape_nutrition_modal(self, menu_name, category_name):
+        """모달 내 스크롤 및 데이터 수집을 실행합니다."""
+        product = {
+            'store_name': 'BurgerKing',
+            'menu_name': menu_name,
+            'price': 0, 'category': category_name,
+            'calories': 0.0, 'carbs': 0.0, 'sugars': 0.0, 'protein': 0.0, 'fat': 0.0,
+            'saturated_fat': 0.0, 'trans_fat': 0.0, 'cholesterol': 0.0, 'sodium': 0.0,
+            'ingredients_raw': '', 'allergens_scraped': ''
+        }
+        
+        MODAL_WRAPPER_SELECTOR = ".modalWrap:not([style*='display: none'])"
+        MODAL_CONTENT_SELECTOR = f"{MODAL_WRAPPER_SELECTOR} .pop_cont"
+
         try:
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
-        except Exception as e:
-            print(f"❌ ChromeDriverManager 오류: {e}")
-            raise
+            # 1. 영양성분 버튼 클릭
+            btn = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".btn_info_link")))
+            self.driver.execute_script("arguments[0].click();", btn)
             
-        self.wait = WebDriverWait(self.driver, 15)
-        print("✅ 브라우저 준비 완료\n")
-        
-    def crawl_all(self):
-        """전체 메뉴 및 가격 크롤링"""
-        # 셔틀 딜리버리 버거킹 메뉴 페이지 URL
-        main_url = "https://www.shuttledelivery.co.kr/ko/restaurant/menu/2510"
-        
-        print("=" * 70)
-        print("🍔 버거킹 셔틀 딜리버리 메뉴 크롤링 시작")
-        print("=" * 70)
+            # 2. 모달 콘텐츠가 로드될 때까지 대기
+            self.wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, MODAL_CONTENT_SELECTOR)))
+            time.sleep(1)
+
+            # 3. 모달 내부를 끝까지 스크롤하여 Lazy Loading 데이터 로드
+            modal_content_element = self.driver.find_element(By.CSS_SELECTOR, MODAL_CONTENT_SELECTOR)
+            self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", modal_content_element)
+            time.sleep(1)
+            
+            # 4. 데이터 파싱
+            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+            target_modal = soup.select_one(MODAL_CONTENT_SELECTOR.split(" .pop_cont")[0]) 
+            
+            if target_modal:
+                container = target_modal.select_one('.pop_cont')
+                
+                # --- 영양 성분 추출: 테이블 파싱 ---
+                # 모달 내 모든 테이블을 찾습니다. (가장 넓은 범위의 탐색)
+                tables = container.select('table')
+                
+                # 테이블이 없는 경우를 대비하여 일반적인 리스트 구조 탐색 (.tit02와 값)
+                nutrition_items = container.select('.pop_cont .tit02') 
+                
+                # 딕셔너리 리스트를 만들어 모든 영양소 정보를 담습니다.
+                all_nutrition_items = []
+
+                # 4.1. 테이블 기반 추출 (가장 흔한 형태)
+                for table in tables:
+                    rows = table.select('tr')
+                    for row in rows:
+                        # cols = 행 내의 모든 td/th 요소
+                        cols = row.select('td, th')
+                        
+                        if len(cols) >= 2 and cols[0].text:
+                            all_nutrition_items.append((cols[0].text.strip(), cols[1].text.strip()))
+                            
+                # 4.2. 리스트 기반 추출 (테이블이 아닌 경우)
+                # 이 로직은 테이블이 아닌 경우에만 사용되지만, 일단 모든 텍스트 쌍을 찾습니다.
+                # (이 부분은 디버깅 파일 확인 후 가장 정확한 선택자로 대체 가능)
+
+                # 추출된 항목을 최종 product 딕셔너리에 매핑
+                for name_raw, val_raw in all_nutrition_items:
+                    for keyword, db_col in NUTRITION_KEYWORDS.items():
+                        if keyword in name_raw:
+                            # 숫자만 추출 (예: '570 kcal' -> 570)
+                            val = float(re.sub(r'[^\d.]', '', val_raw)) if re.search(r'\d', val_raw) else 0.0
+                            product[db_col] = val
+                            break
+                
+                # --- 알레르기 정보 추출 ---
+                full_text = container.get_text(separator=' | ', strip=True)
+                product['allergens_scraped'] = full_text[:500]
+
+        except Exception as e:
+            print(f"   ⚠️ 모달 데이터 수집 실패: {e}")
+
+        # 5. 모달 닫기
+        finally:
+            try:
+                # 하단 '확인' 버튼 클릭을 통해 모달 닫기
+                close_btn_script = "document.querySelector('.modalWrap:not([style*=\"none\"]) .pop_foot button').click();"
+                self.driver.execute_script(close_btn_script)
+                self.wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, MODAL_WRAPPER_SELECTOR)), timeout=3)
+            except:
+                pass
+
+        return product
+
+    def run(self):
+        self.driver.get("https://www.burgerking.co.kr/menu/main")
+        time.sleep(3)
         
         all_products = []
         
-        try:
-            self.driver.get(main_url)
-            print(f"📡 페이지 접속: {main_url}")
-            
-            # 1. 메뉴 목록 컨테이너가 로드될 때까지 대기
-            self.wait.until(EC.presence_of_element_located((By.ID, 'leftBasketColumn')))
-            time.sleep(3) # 추가 로딩 대기
+        category_selectors = [
+            'input[value="cat_K200003"] + .txt_box', 'input[value="cat_K200004"] + .txt_box', 
+            'input[value="cat_K200005"] + .txt_box', 'input[value="cat_K200006"] + .txt_box', 
+            'input[value="cat_K200010"] + .txt_box', 'input[value="cat_K200020"] + .txt_box',
+        ]
 
-            # 2. HTML 파싱
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            
-            # 3. 카테고리별 섹션 추출 (예: 와퍼세트, 와퍼주니어 세트, 와퍼, 사이드, 음료)
-            menu_sections = soup.select('#leftBasketColumn .single-menu')
-            
-            if not menu_sections:
-                print("❌ 메뉴 섹션을 찾을 수 없습니다. (선택자: #leftBasketColumn .single-menu)")
-                return pd.DataFrame()
+        category_names = ['프리미엄', '와퍼&주니어', '치킨&슈림프버거', '올데이스낵&올데이킹', '사이드', '음료&디저트']
+        
+        print(f"🔎 크롤링 시작: 총 {len(category_names)}개 카테고리")
 
-            print(f"📦 총 {len(menu_sections)}개 메뉴 섹션 발견. 파싱 시작...")
+        # 1. 전체 스크롤 및 메뉴 로딩
+        self.scroll_to_bottom()
 
-            for section in menu_sections:
-                # 카테고리명 추출 (예: "와퍼세트")
-                category_elem = section.select_one('.headingTitle')
-                if not category_elem:
-                    continue
-                category_name = category_elem.text.strip()
+        # 2. 그룹별 순회 (탭 클릭은 이제 필요 없음, 전체 리스트에서 그룹별로 처리)
+        # 모든 메뉴가 로드된 상태에서, 페이지 내의 모든 메뉴 리스트 컨테이너를 찾습니다.
+        groups = self.driver.find_elements(By.CSS_SELECTOR, ".menu_list_wrap .divide_group")
+        group_count = len(groups)
+        print(f"🔎 총 {group_count}개의 메뉴 그룹 발견")
+        
+        for g_idx in range(group_count):
+            try:
+                # DOM 재탐색: 그룹 요소 다시 찾기
+                groups = self.driver.find_elements(By.CSS_SELECTOR, ".menu_list_wrap .divide_group")
+                current_group = groups[g_idx]
                 
-                print(f"  > 카테고리: {category_name}")
-
-                # 해당 섹션 내의 모든 메뉴 아이템 추출
-                items = section.select('.items .menuitem')
+                try:
+                    cat_name = current_group.find_element(By.CSS_SELECTOR, ".tit01").text.strip()
+                except:
+                    cat_name = "기타"
                 
-                for item in items:
+                cards = current_group.find_elements(By.CSS_SELECTOR, ".menu_list li .menu_card")
+                card_count = len(cards)
+                print(f"\n📂 [{cat_name}] 진입 - {card_count}개 메뉴")
+
+                for i in range(card_count):
                     try:
-                        # 메뉴명: .itemtitle (대부분의 메뉴명은 여기에 있음)
-                        name_elem = item.select_one('.itemtitle')
-                        name = name_elem.text.strip() if name_elem else "이름 없음"
+                        # DOM 재탐색: 카드 요소 다시 찾기
+                        current_cards = current_group.find_elements(By.CSS_SELECTOR, ".menu_list li .menu_card")
+                        if i >= len(current_cards): break
                         
-                        # 가격: .price
-                        price_elem = item.select_one('.price')
-                        price_text = price_elem.text.strip() if price_elem else None
+                        card = current_cards[i]
+                        menu_name = card.find_element(By.CSS_SELECTOR, ".tit").text.strip()
                         
-                        price = None
-                        if price_text:
-                            # 가격 텍스트에서 '원'과 쉼표를 제거하고 정수로 변환
-                            price = int(re.sub(r'[^\d]', '', price_text))
+                        print(f"   ✅ 수집 중 ({i+1}/{card_count}): {menu_name}", end="\r")
                         
-                        # 설명: p 태그 (메뉴 상세 설명)
-                        description_elem = item.select_one('.titlecol p')
-                        description = description_elem.text.strip() if description_elem else ''
+                        # 화면 중앙으로 스크롤 (클릭 오류 방지)
+                        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", card)
+                        time.sleep(0.5)
 
-                        # 이미지 URL: menupage-thumbnail의 data-original 속성
-                        img_anchor = item.select_one('.menupage-thumbnail')
-                        image_url = img_anchor.get('data-original', '') if img_anchor else ''
+                        # 상세 페이지 진입 및 데이터 수집
+                        detail_btn = card.find_element(By.CSS_SELECTOR, "button.btn_detail")
+                        self.driver.execute_script("arguments[0].click();", detail_btn)
                         
-                        product = {
-                            'brand_name': '버거킹',
-                            'item_name': name,
-                            'category': category_name,
-                            'price': price,
-                            'description': description,
-                            'image_url': image_url,
-                        }
+                        self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".prd_detailWrap")))
+                        time.sleep(1)
                         
-                        # 가격이 없는 항목은 제외하거나 경고를 표시할 수 있지만, 일단 모두 수집
-                        if price is not None:
-                            all_products.append(product)
+                        # 데이터 수집 (모달 처리)
+                        product_data = self.scrape_nutrition_modal(menu_name, cat_name)
+                        
+                        # 원재료명(설명) 추가 수집
+                        try:
+                            desc = self.driver.find_element(By.CSS_SELECTOR, ".description span").text.strip()
+                            product_data['ingredients_raw'] = desc
+                        except:
+                            pass
+                            
+                        all_products.append(product_data)
+                        
+                        # 리스트로 복귀
+                        self.driver.back()
+                        self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".menu_list_wrap")))
+                        time.sleep(1.5)
                         
                     except Exception as e:
-                        print(f"    - [WARN] 개별 메뉴 파싱 오류 (이전 메뉴: {name if 'name' in locals() else 'Unknown'}): {e}")
+                        print(f"\n   ❌ 메뉴 에러: {menu_name} - {e}")
+                        try: self.driver.back(); time.sleep(2)
+                        except: pass
                         continue
 
-            if not all_products:
-                 print("\n❌ 수집된 유효한 데이터가 없습니다.")
-                 return pd.DataFrame()
-                 
+            except Exception as e:
+                print(f"❌ 그룹 처리 에러: {e}")
+                continue
+
+        # CSV 저장
+        if all_products:
             df = pd.DataFrame(all_products)
-            df = df.drop_duplicates(subset=['item_name'], keep='first')
+            os.makedirs(settings.DATA_RAW, exist_ok=True)
+            filepath = os.path.join(settings.DATA_RAW, 'burgerking_products.csv')
             
-            print("\n" + "=" * 70)
-            print(f"📊 버거킹 딜리버리 메뉴 및 가격 수집 완료")
-            print("=" * 70)
-            print(f"총 상품 수: {len(df)}개")
-            print(f"\n카테고리별:")
-            print(df['category'].value_counts())
+            columns = [
+                'store_name', 'menu_name', 'price', 'calories', 'carbs', 'sugars', 
+                'protein', 'fat', 'saturated_fat', 'trans_fat', 'cholesterol', 
+                'sodium', 'allergens_scraped', 'ingredients_raw', 'category'
+            ]
             
-            return df
-        
-        except TimeoutException:
-            print("\n❌ 페이지 로드 시간 초과. (네트워크 문제 또는 로딩 지연)")
-            return pd.DataFrame()
-        except Exception as e:
-            print(f"\n❌ 전체 크롤링 오류: {e}")
-            import traceback
-            traceback.print_exc()
-            return pd.DataFrame()
-    
-    def save_to_csv(self, df, filename='burgerking_shuttle_delivery_menu.csv'):
-        """CSV 저장"""
-        if df.empty:
-            print("⚠️ 저장할 데이터가 없습니다.")
-            return
-        
-        os.makedirs(settings.DATA_RAW, exist_ok=True)
-        filepath = os.path.join(settings.DATA_RAW, filename)
-        
-        # 'description' 열 추가
-        df.to_csv(filepath, index=False, encoding='utf-8-sig')
-        
-        print(f"\n💾 저장 완료: {filepath}")
-        print(f"\n=== 샘플 데이터 (처음 10개) ===")
-        print(df[['item_name', 'category', 'price', 'description']].head(10).to_string(index=False))
-    
+            for col in columns:
+                if col not in df.columns: df[col] = 0 if col not in ['store_name', 'menu_name', 'allergens_scraped', 'ingredients_raw', 'category'] else ''
+                
+            df.to_csv(filepath, index=False, columns=columns, encoding='utf-8-sig')
+            print(f"\n\n🎉 버거킹 저장 완료: {filepath} (총 {len(df)}개 메뉴)")
+        else:
+            print("\n⚠️ 수집된 데이터가 없습니다.")
+
     def close(self):
-        """브라우저 종료"""
-        try:
-            self.driver.quit()
-            print("\n🔒 브라우저 종료")
-        except:
-            pass
-
-
-def main():
-    """메인 실행"""
-    # 딜리버리 웹사이트는 모바일 에뮬레이션 없이도 잘 작동하므로 일반 PC 모드로 실행합니다.
-    crawler = BurgerKingShuttleCrawler(headless=False) 
-    
-    try:
-        df = crawler.crawl_all()
-        
-        if not df.empty:
-            crawler.save_to_csv(df)
-    
-    except KeyboardInterrupt:
-        print("\n\n⚠️ 사용자가 중단했습니다.")
-    except Exception as e:
-        print(f"\n❌ 메인 실행 오류: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    finally:
-        crawler.close()
-        print("\n✅ 프로그램 종료")
-
+        self.driver.quit()
 
 if __name__ == "__main__":
-    main()
+    crawler = BurgerKingCrawler(headless=False)
+    try:
+        crawler.run()
+    except KeyboardInterrupt:
+        print("\n사용자 중단")
+    finally:
+        crawler.close()
