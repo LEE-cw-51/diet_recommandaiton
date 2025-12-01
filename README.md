@@ -517,3 +517,271 @@ class NewAlgorithm:
 ---
 
 *이 프로젝트는 건강 불평등을 완화하고, 대학생과 직장인이 경제적 부담 없이 건강한 식단을 유지하도록 돕기 위해 시작되었습니다.* 🥗✨
+
+**주요 변경 사항:**
+
+1.  **알고리즘 설명 수정:** 단순 선형계획법(Linear Programming)에서 **'몬테카를로 시뮬레이션 + 파레토 최적화'** 방식으로 변경된 로직을 반영했습니다. (v1.6 코드 기준)
+2.  **진행 상황(Status) 업데이트:** 데이터 수집 단계를 넘어 **데이터 매칭(RapidFuzz 도입)** 및 **추천 알고리즘(v1.6)** 구현이 완료된 상태로 변경했습니다.
+3.  **기술 스택 추가:** `rapidfuzz` (고속 데이터 매칭), `tqdm` 등 실제 사용된 라이브러리를 추가했습니다.
+4.  **프로젝트 구조 현행화:** 실제 파일명(`daily_diet_optimizer_1.6.py` 등)에 맞춰 트리 구조를 수정했습니다.
+
+아래 마크다운 코드를 그대로 복사하여 `README.md` 파일에 덮어쓰시면 됩니다.
+
+-----
+
+````markdown
+# 🥗 예산 기반 편의점 AI 식단 추천 서비스 (Diet Recommendation)
+
+사용자가 **예산(예: 7,000원)**과 **목표(다이어트/근육증가/건강관리)**를 입력하면, AI가 편의점 음식 중에서 **영양 균형(탄단지 비율)과 나트륨/당류 제약**을 고려한 최적의 조합을 찾아 추천해주는 서비스입니다.
+
+---
+
+## 🎯 핵심 가치
+
+| 구분 | 설명 |
+|------|------|
+| **초개인화** | 사용자 체중, 목표, **알레르기 정보**까지 고려한 맞춤 추천 |
+| **경제성** | 예산 제약 내에서 영양소 섭취를 극대화하는 가성비 식단 |
+| **접근성** | 접근성이 높은 4대 편의점(CU, GS25, 세븐일레븐, 이마트24) 통합 지원 |
+
+---
+
+## 📊 프로젝트 개요
+
+### 1. 문제 정의
+- **식비 부담**: 직장인 평균 점심값 상승(런치플레이션)으로 인한 경제적 부담
+- **영양 불균형**: 저렴한 편의점 음식은 '건강에 나쁘다'는 인식과 실제 고나트륨/고탄수화물 문제
+- **선택의 어려움**: 수많은 제품 중 영양 성분을 일일이 확인하고 조합하기 번거로움
+
+### 2. 솔루션: AI 영양사
+- **시뮬레이션 기반 추천**: 10만 번 이상의 식단 조합 시뮬레이션을 통해 최적의 해답 도출
+- **파레토 최적화**: 가격은 낮추면서 영양 오차는 줄이는 '파레토 효율적' 식단 선별
+- **데이터 기반**: 공공데이터포털의 영양정보와 편의점 실시간 가격 정보 매칭
+
+---
+
+## 🛠️ 기술 스택 (Tech Stack)
+
+### 개발 환경
+- **Language**: Python 3.12+
+- **Version Control**: Git
+- **Virtual Env**: venv
+
+### 핵심 라이브러리
+| 라이브러리 | 용도 | 비고 |
+|-----------|------|------|
+| **Pandas** | 데이터 전처리 및 분석 | 결측치 처리, 데이터 프레임 관리 |
+| **Selenium** | 웹 크롤링 | 동적 페이지(편의점 행사 상품 등) 수집 |
+| **RapidFuzz** | 고속 텍스트 매칭 | 제품명과 영양성분 DB 간 유사도 매칭 (최적화) |
+| **FuzzyWuzzy** | 문자열 유사도 분석 | 보조 매칭 알고리즘 |
+| **Tqdm** | 진행률 시각화 | 데이터 처리 과정 모니터링 |
+
+---
+
+## 📁 프로젝트 구조 (Current Structure)
+
+```bash
+diet_recommendation/
+├── venv/
+├── config/
+│   └── settings.py                # 프로젝트 설정
+├── data/
+│   ├── raw/                       # 크롤링 원본 데이터
+│   │   ├── all_stores_products.csv # 4대 편의점 통합 데이터
+│   │   └── ...
+│   └── processed/                 # 전처리 및 매칭 완료 데이터
+│       ├── final_nutrition_db.csv
+│       └── matched_nutrition_db.csv
+├── crawlers/                      # 데이터 수집 (크롤러)
+│   ├── crawl_all_stores.py        # 통합 크롤링 실행 스크립트
+│   ├── cu_crawler_final.py
+│   ├── gs25_crawler.py
+│   ├── seven_crawler.py
+│   └── emart24_crawler.py
+├── algorithm/                     # 추천 알고리즘 엔진
+│   ├── daily_diet_optimizer_2.6_test.py  # ✅ v2.6 실행 파일 (병렬 처리+시각화)
+│   └── daily_diet_optimizer_2.5.py       # (Legacy) v2.5 로직
+├── utils/
+│   └── master_db_merge.py         # 제품명-영양정보 매칭 (RapidFuzz 적용)   
+│   └── fill_real_prices.py        # 가격 보정 로직       
+├── requirements.txt               # 의존성 패키지 목록
+└── README.md
+````
+
+-----
+
+## 🚀 기능 및 알고리즘 (Algorithm)
+
+본 프로젝트는 단순한 랜덤 추천이 아닌, **영양학적 목표를 달성하기 위한 수학적 알고리즘**을 사용합니다.
+
+### 1\. 데이터 수집 및 매칭 (Data Pipeline)
+
+  - **크롤링**: Selenium을 이용해 4대 편의점(CU, GS25, 7-Eleven, Emart24)의 신선식품/간편식 가격 정보를 수집합니다.
+  - **Fuzzy Matching**: `RapidFuzz`를 활용하여 크롤링한 '상품명'과 식약처 '영양성분 DB'를 유사도 기반으로 자동 매칭합니다. (정확도 90% 이상)
+
+### 2\. 추천 엔진 (Optimization Engine v1.6)
+
+**DailyDietOptimizer**는 다음 과정을 통해 식단을 생성합니다:
+
+1.  **필터링 (Filtering)**:
+      * 사용자 알레르기 유발 성분(예: 난류, 땅콩) 제외
+      * 예산 범위 및 최소 칼로리 조건 확인
+2.  **몬테카를로 시뮬레이션 (Monte Carlo Simulation)**:
+      * 약 100,000가지 이상의 메뉴 조합을 무작위 생성
+3.  **영양 적합성 평가 (Validation)**:
+      * **EER 비율**: 탄수화물/단백질/지방 비율이 목표(다이어트 등)에 부합하는지 검사
+      * **제약 조건**: 나트륨(2500mg 이하), 당류(총 칼로리의 10% 이하) 제한 준수 여부 확인
+4.  **파레토 최적화 (Pareto Optimization)**:
+      * **다목적 최적화**: '가격 최소화'와 '영양 오차 최소화'라는 상충되는 목표를 동시에 만족하는 \*\*파레토 최적해(Pareto Frontier)\*\*를 도출하여 최종 추천
+
+-----
+
+## 💻 빠른 시작 (Quick Start)
+
+### 1\. 환경 설정 및 설치
+
+```bash
+# 레포지토리 클론 (예시)
+git clone [https://github.com/username/diet-recommendation.git](https://github.com/username/diet-recommendation.git)
+
+# 가상환경 생성 및 활성화
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
+
+# 필수 패키지 설치
+pip install -r requirements.txt
+```
+
+### 2\. 데이터 수집 (크롤링)
+
+최신 편의점 가격 정보를 가져오려면 아래 명령어를 실행하세요.
+
+```bash
+python crawlers/crawl_all_stores.py
+```
+
+> 결과 파일은 `data/raw/all_stores_products.csv`에 저장됩니다.
+
+### 3\. 데이터 매칭 (전처리)
+
+수집된 가격 데이터와 영양 정보를 매칭합니다. (RapidFuzz 사용)
+
+```bash
+python data/master_db_merge.py
+```
+
+### 4\. 식단 추천 실행
+
+AI 추천 엔진을 실행하여 결과를 확인합니다.
+
+```bash
+python algorithm/daily_diet_optimizer_1.6.py
+```
+
+-----
+
+## 📊 개발 진행 상황 (Dev Status)
+
+### ✅ Phase 1: 데이터 인프라 구축 (완료)
+
+  - [x] 4대 편의점(CU, GS25, 7-Eleven, Emart24) 크롤러 구현 완료
+  - [x] 식약처 영양성분 데이터베이스 확보
+  - [x] **RapidFuzz 기반** 대용량 텍스트 매칭 파이프라인 구축 (`master_db_merge.py`)
+
+### ✅ Phase 2: 알고리즘 고도화 (완료)
+
+  - [x] 영양소 섭취 비율(탄단지) 계산 로직 구현
+  - [x] 나트륨, 당류, 포화지방 등 건강 위험 요소 제약 조건 추가
+  - [x] 알레르기 필터링 기능 구현
+  - [x] **v1.6 업데이트**: 몬테카를로 시뮬레이션 및 파레토 최적화 적용으로 추천 품질 향상
+
+### 🔄 Phase 3: 서비스 확장 (진행 중)
+
+  - [ ] 사용자 인터페이스(UI) 개발 (Web/App)
+  - [ ] 실제 편의점 재고 API 연동 (Future Work)
+  - [ ] 추천 속도 최적화
+
+-----
+
+## 📝 라이선스
+
+MIT License
+
+-----
+
+*Last Updated: 2025.11 (v1.6)*
+
+```
+---
+
+# 🚀 [업데이트] 알고리즘 고도화 (Algorithm v2.6)
+
+기존 선형 계획법(v1.0)에서 진화하여, **다양성(Diversity)**과 **현실성(Feasibility)**을 대폭 강화한 최신 추천 엔진입니다.
+
+## 1. 🧠 핵심 로직 개선 사항
+
+| 구분 | v1.x (초기 모델) | **v2.6 (현재 모델)** |
+| :--- | :--- | :--- |
+| **목표 설정** | 고정 비율 (단순 N빵) | **체중 기반 동적 할당** (사용자 체중 × 목표 계수) |
+| **식단 구성** | 단순 영양소 최적화 | **브랜드 세트(One-Stop) + 카테고리 템플릿** |
+| **다양성** | 고려 없음 | **해밍 거리(Hamming Distance) + 재료 중복 방지** |
+| **실패 처리** | 추천 실패 | **3단계 재시도 전략** (Strict → Relaxed → Fallback) |
+
+### 상세 로직 설명
+1.  **동적 목표 할당:** 하루 목표(P/C/F)를 설정하고, 이전 끼니의 섭취량에 따라 남은 끼니의 목표를 자동으로 보정합니다.
+2.  **3단계 재시도 전략:**
+    * **1차(Strict):** 영양 목표 95% 이상 + 브랜드 중복 금지 (최적해)
+    * **2차(Relaxed):** 영양 목표 70% 이상 + 브랜드 유지 (다양성 우선)
+    * **3차(Fallback):** 브랜드 제약 해제 (최후의 수단)
+3.  **다양성 필터링:** `밥+밥` 같은 탄수화물 중복이나 `참치+참치` 같은 재료 중복을 수학적으로 계산하여 차단합니다.
+
+---
+
+## 🏗️ 데이터 파이프라인 & 아키텍처
+diet_recommendation/
+├── venv/
+├── config/
+│   └── settings.py                # 프로젝트 설정
+├── data/
+│   ├── raw/                       # 크롤링 원본 데이터
+│   │   ├── all_stores_products.csv # 4대 편의점 통합 데이터
+│   │   └── ...
+│   └── processed/                 # 전처리 및 매칭 완료 데이터
+│       ├── final_nutrition_db.csv
+│       └── matched_nutrition_db.csv
+├── crawlers/                      # 데이터 수집 (크롤러)
+│   ├── crawl_all_stores.py        # 통합 크롤링 실행 스크립트
+│   ├── cu_crawler_final.py
+│   ├── gs25_crawler.py
+│   ├── seven_crawler.py
+│   └── emart24_crawler.py
+├── algorithm/                     # 추천 알고리즘 엔진
+│   ├── daily_diet_optimizer_2.6_test.py  # ✅ v2.6 실행 파일 (병렬 처리+시각화)
+│   └── daily_diet_optimizer_2.5.py       # (Legacy) v2.5 로직
+├── utils/
+│   └── master_db_merge.py         # 제품명-영양정보 매칭 (RapidFuzz 적용)   
+│   └── fill_real_prices.py        # 가격 보정 로직       
+├── requirements.txt               # 의존성 패키지 목록
+└── README.md
+
+## 📊 최신 개발 진행률 (Update)
+
+### ✅ Phase 1.5: 데이터 고도화 (완료)
+- [x] **통합 마스터 DB 구축:** 공공 데이터 포털 영양정보 + 5대 편의점/프랜차이즈 가격 매칭 완료
+- [x] **가격 보정:** 결측된 가격 정보를 카테고리별 표준 가격으로 보정 (`fill_real_prices.py`)
+
+### ✅ Phase 2: 알고리즘 최적화 (완료)
+- [x] **파레토 최적화:** 가격 vs 영양 오차 상충 관계 해결
+- [x] **다양성 알고리즘:** 해밍 거리(Hamming Distance) 기반 메뉴 추천 다양화
+- [x] **시뮬레이션 검증:** 1,000명 랜덤 유저 대상 병렬 처리 성능 테스트 완료 (`2.6_test.py`)
+
+### 🔜 Phase 4: 개인화 추천 (진행 예정)
+- [ ] 사용자 선호도(맛, 재료) 학습을 위한 딥러닝 모델(NCF) 도입 준비
+- [ ] 실제 사용자 피드백 데이터 수집 파이프라인 설계
+
+---
+
+*Last Updated: 2025.12 (Logic v2.6 Applied)*
