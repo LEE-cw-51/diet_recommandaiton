@@ -3,8 +3,10 @@
 """
 
 class Settings:
-    # 영양성분 API (나중에 API 키 발급받으면 여기에 입력)
+    # 영양성분 공공 API (공공데이터포털: data.go.kr)
     NUTRITION_API_KEY = "your-api-key-here"
+    NUTRITION_API_URL = "https://apis.data.go.kr/1471000/FoodNtrIrdntInfoService1/getFoodNtrItdntList1"
+    NUTRITION_API_PAGE_SIZE = 100
     
     # DB 설정 (MySQL 설치 후 사용)
     DB_HOST = "localhost"

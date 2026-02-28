@@ -6,11 +6,18 @@ import sys
 import time
 import multiprocessing
 import matplotlib.pyplot as plt 
+import matplotlib.font_manager as fm
 from collections import Counter
 
 # -----------------------------------------------------------
-# [설정] 차트 한글 폰트 깨짐 방지
+# [설정] 차트 한글 폰트 깨짐 방지 (로컬 환경용)
 # -----------------------------------------------------------
+# 실행 전 본인 PC에 설치된 한글 폰트명으로 변경이 필요할 수 있습니다.
+# Mac: 'AppleGothic', Windows: 'Malgun Gothic' 등
+try:
+    plt.rcParams['font.family'] = 'Malgun Gothic' 
+except:
+    pass
 plt.rcParams['axes.unicode_minus'] = False
 
 # -----------------------------------------------------------
@@ -83,16 +90,57 @@ class FoodCategorizer:
         return 'SIDE'
 
 class DiversityManager:
+    """
+    [v2.7.1 Upgrade] 
+    통합 임베딩 (Integrated Embedding): 메뉴명 + 알러지 정보
+    """
     def __init__(self):
+        # 1. 메뉴명 추정 특성 (Name Features)
+        self.name_features = [
+            '닭', '치킨', '가슴살', # 0: Poultry
+            '돼지', '돈까스', '햄', '베이컨', '소시지', '핫바', '후랑크', # 1: Pork
+            '소', '비프', '불고기', '스테이크', # 2: Beef
+            '새우', '오징어', '해물', '생선', '명란', # 3: Seafood
+            '면', '파스타', '국수', '우동', '스파게티', '짜장', '짬뽕', # 4: Noodles
+            '밥', '라이스', '덮밥', '비빔밥', '볶음밥', '국밥', '죽', '리조또', # 5: Rice
+            '빵', '버거', '샌드위치', '토스트', '베이글', '피자', '핫도그', # 6: Bread
+            '매운', '핫', '스파이시' # 7: Taste
+        ]
+        
+        # 2. 알러지 정보 기반 특성 (Allergen Features)
+        self.allergy_features = [
+            '난류', '알류', '계란', # Eggs
+            '우유', # Milk/Dairy
+            '땅콩', '견과', # Nuts
+            '복숭아', '토마토', # Fruits/Veg
+            '밀', '대두' # Common Allergens (이건 중복 허용 가능성이 높음)
+        ]
+        
+        # 3. 카테고리
         self.cat_keys = ['MAIN', 'SIDE', 'DRINK', 'SNACK'] 
-        # 핵심 재료 키워드 (중복 방지용)
-        self.ingredients = ['참치', '치킨', '닭', '불고기', '비프', '소고기', '돼지', '돈까스', '스팸', '햄', '새우', '오징어', '제육', '갈비', '베이컨', '계란', '명란']
 
     def create_vector(self, item):
+        """메뉴 이름, 알러지 정보, 카테고리를 모두 반영한 통합 벡터 생성"""
         vector = []
+        name = item.get('menu_name', item.get('식품명', ''))
+        allergens = str(item.get('allergens_scraped', ''))
+        
+        # (1) 이름 기반 특성 태깅
+        for feature in self.name_features:
+            vector.append(1 if feature in name else 0)
+            
+        # (2) 알러지 정보 기반 특성 태깅 (이름 또는 알러지 정보 컬럼 확인)
+        for feature in self.allergy_features:
+            if feature in allergens or feature in name:
+                vector.append(1)
+            else:
+                vector.append(0)
+        
+        # (3) 카테고리 태깅
         item_cat = item.get('category_tag', 'ETC')
         for cat in self.cat_keys:
             vector.append(1 if cat == item_cat else 0)
+            
         return np.array(vector)
 
     def calculate_hamming_distance(self, vec1, vec2):
@@ -100,30 +148,39 @@ class DiversityManager:
 
     def get_diversity_score(self, combo):
         if len(combo) < 2: return 0.0
+        
         vectors = [self.create_vector(item) for item in combo]
         distances = []
+        
         for i in range(len(vectors)):
             for j in range(i + 1, len(vectors)):
                 dist = self.calculate_hamming_distance(vectors[i], vectors[j])
                 distances.append(dist)
+        
         return np.mean(distances) if distances else 0.0
     
     def check_ingredient_overlap(self, combo):
+        """
+        [중요] 중복 필터링은 '메인 재료'에 대해서만 엄격하게 적용
+        (밀, 대두 같은 흔한 알러지 성분이 겹친다고 식단을 제외하면 안 되므로)
+        """
         if len(combo) < 2: return False
-        found_ingredients = []
-        for item in combo:
-            name = item.get('menu_name', item.get('식품명', ''))
-            for ing in self.ingredients:
-                if ing in name: found_ingredients.append(ing)
         
-        counts = Counter(found_ingredients)
-        for ing, count in counts.items():
-            if count > 1: return True # 중복 발생
+        vectors = [self.create_vector(item) for item in combo]
+        
+        # 메인 재료 특성의 길이만큼만 슬라이싱해서 검사 (name_features)
+        main_feature_len = len(self.name_features)
+        
+        sum_vector = np.sum(vectors, axis=0)
+        
+        # 메인 재료 부분에서 2개 이상 겹치면 True (제외)
+        if np.any(sum_vector[:main_feature_len] > 1):
+            return True
         return False
 
 class DailyDietOptimizer:
     def __init__(self, data_path=DATA_PATH):
-        print("⚙️ AI 추천 엔진 초기화 중 (v2.6_test: 3-Stage Retry + Visualization)...")
+        print("⚙️ AI 추천 엔진 초기화 중 (v2.7.1: Name + Allergen Vectorization)...")
         if not os.path.exists(data_path):
             data_path = 'final_nutrition_db.csv' 
             if not os.path.exists(data_path):
@@ -137,6 +194,7 @@ class DailyDietOptimizer:
         for col in numeric_cols:
              self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
 
+        # 알러지 컬럼 문자열 변환
         if 'allergens_scraped' in self.df.columns:
             self.df['allergens_scraped'] = self.df['allergens_scraped'].astype(str).str.lower()
         else:
@@ -236,11 +294,12 @@ class DailyDietOptimizer:
             if drinks and random.random() < 0.5:
                 combo.append(random.choice(drinks))
             
-            # 재료 중복 및 해밍 거리 체크
+            # [v2.7.1] 통합 벡터 기반 중복 재료 필터링
             if self.div_manager.check_ingredient_overlap(combo): continue
             
             div_score = 0
             if len(combo) > 1:
+                # [v2.7.1] 통합 벡터 기반 다양성 점수 계산
                 div_score = self.div_manager.get_diversity_score(combo)
                 if div_score == 0.0: continue
 
@@ -300,7 +359,7 @@ def run_single_simulation(user_profile):
         target_prot = max((d_prot - current_status['protein']) / remaining_meals, 10)
         target_fat = max((d_fat - current_status['fat']) / remaining_meals, 5)
         
-        # 1차 시도: Strict + 브랜드 제외
+        # 1차 시도
         meal_result = optimizer_instance.recommend_daily_diet(
             target_cal=target_cal, target_prot=target_prot, target_fat=target_fat,
             user_goal=user_profile['goal'], allergies_to_avoid=user_profile['allergies'],
@@ -308,7 +367,7 @@ def run_single_simulation(user_profile):
             prot_min_factor=0.95, cal_range=0.15
         )
         
-        # 2차 시도: Relaxed + 브랜드 제외 유지
+        # 2차 시도
         if isinstance(meal_result, str):
             meal_result = optimizer_instance.recommend_daily_diet(
                 target_cal=target_cal, target_prot=target_prot, target_fat=target_fat,
@@ -317,12 +376,12 @@ def run_single_simulation(user_profile):
                 prot_min_factor=0.70, cal_range=0.30
             )
 
-        # 3차 시도: Relaxed + 브랜드 제외 해제 (최후의 수단)
+        # 3차 시도
         if isinstance(meal_result, str):
             meal_result = optimizer_instance.recommend_daily_diet(
                 target_cal=target_cal, target_prot=target_prot, target_fat=target_fat,
                 user_goal=user_profile['goal'], allergies_to_avoid=user_profile['allergies'],
-                excluded_codes=excluded_codes, excluded_brands=set(), # 브랜드 리셋
+                excluded_codes=excluded_codes, excluded_brands=set(),
                 prot_min_factor=0.70, cal_range=0.30
             )
 
@@ -400,9 +459,14 @@ if __name__ == "__main__":
     user_gen = RandomUserGenerator()
     users = [user_gen.generate() for _ in range(NUM_USERS)]
     
-    CORES_TO_USE = 4
+    try:
+        total_cores = multiprocessing.cpu_count()
+        CORES_TO_USE = max(1, total_cores - 1)
+    except:
+        CORES_TO_USE = 2
     
-    print(f"\n🚀 [Parallel] {NUM_USERS}명 시뮬레이션 및 시각화 시작 (v2.6 Logic)")
+    print(f"\n🚀 [Parallel] {NUM_USERS}명 시뮬레이션 시작 (v2.7.1: Name + Allergen Vector)")
+    print(f"⚡ 활용할 CPU 코어 수: {CORES_TO_USE}개")
     print("--------------------------------------------------")
     
     start_time = time.time()
@@ -414,7 +478,6 @@ if __name__ == "__main__":
     
     success_results = [res for res in results if res['success']]
     success_cnt = len(success_results)
-    fail_cnt = NUM_USERS - success_cnt
     
     prices = []
     cal_accuracies = []
@@ -449,14 +512,14 @@ if __name__ == "__main__":
             plot_distribution(axes[0, 0], prices, "Price Distribution", "Price (KRW)", color='skyblue')
             plot_distribution(axes[0, 1], cal_accuracies, "Calorie Accuracy", "Accuracy (%)", color='lightgreen')
             plot_distribution(axes[1, 0], prot_accuracies, "Protein Accuracy", "Accuracy (%)", color='salmon')
-            plot_distribution(axes[1, 1], diversity_scores, "Diversity Score", "Score (0.0-2.0)", color='gold')
+            plot_distribution(axes[1, 1], diversity_scores, "Diversity Score (Hamming)", "Score", color='gold')
             plt.tight_layout()
             plt.show()
         except Exception as e:
             print(f"❌ 시각화 오류: {e}")
 
     if success_cnt > 0:
-        sample_size = min(10, success_cnt)
+        sample_size = min(5, success_cnt)
         random_samples = random.sample(success_results, sample_size)
         print(f"\n🎲 랜덤 샘플 {sample_size}명 상세 출력")
         print("==================================================")
