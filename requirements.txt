@@ -35,3 +35,13 @@ urllib3==2.5.0
 webdriver-manager==4.0.2
 websocket-client==1.9.0
 wsproto==1.2.0
+
+# ── 파이프라인 신규 추가 ─────────────────────────────────────
+# Supabase Python 클라이언트
+supabase>=2.0.0
+# Gemini API (Step 1: 원재료명 파싱) — google-generativeai deprecated, 신규 SDK 사용
+google-genai>=1.0.0
+# Groq API (Step 2: 식사 분류)
+groq>=0.9.0
+# 진행률 표시
+tqdm>=4.0.0
