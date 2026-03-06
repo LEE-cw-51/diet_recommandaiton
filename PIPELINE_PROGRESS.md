@@ -1,10 +1,10 @@
 # 연구 파이프라인 진행 상황
 
 ## 현재 상태
-- 현재 세션: Session 2 완료 / 5
-- 플랜 파일: `C:\Users\chanw\.claude\plans\tingly-enchanting-yao.md`
-- 마지막 업데이트: Session 2 (검색 클라이언트 + 5개 테스트 완료, 아키텍처 수정 발견)
-- **다음 작업**: Session 3 — Step 0(영양성분 BULK COPY) → Step 1 수정 → 전체 2,524개 실행
+- 현재 세션: Session 3 진행 중 (Step 1 31% 완료, 내일 재개 예정)
+- 플랜 파일: `C:\Users\chanw\.claude\plans\cheeky-hopping-llama.md`
+- 마지막 업데이트: 2026-03-07 (Step 1 중단, price NULL 원인 분석, fallback 계획 수립)
+- **다음 작업**: 코드 수정 (search_clients.py fallback + step1 food_group) → --test 5 검증 → --resume 재개
 
 ## 프로젝트 경로
 - 워킹 디렉토리: `C:\Users\chanw\Desktop\diet_recommendation\.claude\worktrees\distracted-boyd`
@@ -130,19 +130,31 @@ algorithm/daily_diet_optimizer.py → from_supabase()
   - **food_research_sample에 price 컬럼 없음**: 가격은 오직 네이버 API에서만 수집
 
 ### Session 3: Step 0 + Step 1 수정 + 전체 실행
-- [ ] 완료
-- 처리량: 5 / 2,524 (Session 2 테스트분, Step 0 실행 전)
-- 체크포인트 파일: `.checkpoint/step1_done.json`
-- **Session 3 시작 전 즉시 할 일**:
-  1. `search_clients.py` HACCP URL 수정 (V1 → V3)
-  2. `step0_bulk_copy.py` 생성 (또는 SQL 직접 실행): food_research_sample → food_master 영양성분 복사
-  3. `step1_price_allergen.py` UPSERT → UPDATE 방식 변경
-  4. (기존 테스트 5개 캐시는 `.checkpoint/` 재사용 가능)
+- [ ] 완료 (진행 중 — Step 1이 789/2,522에서 중단, 내일 재개)
+- 처리량: 789 / 2,522 (Step 0 완료 2,522행, Step 1 31%)
+- 체크포인트 파일: `.checkpoint/step1_done.json` (789개 ID 저장됨)
+- **워크트리**: `C:\Users\chanw\Desktop\diet_recommendation\.claude\worktrees\reverent-easley`
+- **완료된 작업**:
+  1. ✅ Step 0 전체 실행 (2,522행 복사, 원본 2,524에서 중복 2개 제거)
+  2. ✅ Step 1 진행 중 (789/2,522 = 31%)
+  3. ✅ gemini-2.5-flash-lite 모델 변경 + 유료 전환
+  4. ✅ PostgREST 1,000행 limit 버그 수정 (pagination 추가)
+- **다음 세션 시작 전 즉시 할 일 (코드 수정 먼저)**:
+  1. `search_clients.py` — `_fallback_naver_search()` 추가 (product_name → standard_product_name 단계적 재시도)
+  2. `step1_price_allergen.py` — food_group 로드 매핑 + fallback price 활용 + Gemini 프롬프트에 식품군(food_group) 추가
+  3. `step1b_fix_null_prices.py` — 신규 생성 (Step 1 완료 후 기존 price=null 보정용)
+  4. 수정 후 `--test 5 --table food_master_test` 검증
+  5. 검증 성공 후 `python pipeline/05_augment/step1_price_allergen.py --resume`
+  6. Step 1 완료 후 `python pipeline/05_augment/step1b_fix_null_prices.py`
 - 완료 기준:
-  - `food_master` 행수 ≈ 2,524
+  - `food_master` 행수 ≈ 2,522
   - `augmented_at IS NOT NULL` 비율 ≥ 90%
-  - `calories IS NOT NULL` 비율 = 100% (Step 0 후)
+  - `calories IS NOT NULL` 비율 = 100% (Step 0 완료)
+  - `price IS NULL` 비율 ≤ 45% (fallback 적용 후 목표)
 - 메모:
+  - price NULL 64% 원인 분석 완료: 네이버 미등록 외국 브랜드·특수 제품 (코드 버그 아님)
+  - food_master.food_group 값 확인: "과자류·빵류 또는 떡류" 형태로 의미있는 값 있음
+  - 상세 계획: `C:\Users\chanw\.claude\plans\cheeky-hopping-llama.md` 참조
 
 ### Session 4: Step 2 식사 분류 (15분)
 - [ ] 완료
@@ -182,6 +194,10 @@ algorithm/daily_diet_optimizer.py → from_supabase()
 | S2 | food_master에 영양성분이 NULL | Step 1 UPSERT에 영양성분 컬럼 누락 → Step 0 bulk copy 필요 |
 | S2 | HACCP API 엔드포인트 버전 오류 | V3 URL로 수정: `CertImgListServiceV3` |
 | S2 | food_research_sample에 price 컬럼 없음 | price는 네이버 API에서만 수집, food_master에 price 컬럼 있음 |
+| S3 | PostgREST 기본 1,000행 limit → step0가 999행만 복사 | range() 기반 pagination 루프 추가 |
+| S3 | ON CONFLICT 배치 내 중복 (product_name+brand_name) | step0에 deduplication 로직 추가, 2,522행 정상 저장 |
+| S3 | price NULL 64% 발생 | 근본 원인: 네이버 미등록 외국/특수 제품. 수정: fallback 검색 로직 추가 예정 |
+| S3 | allergens 추론 컨텍스트 부족 | food_master.food_group ("과자류·빵류 또는 떡류" 등) Gemini 프롬프트에 추가 예정 |
 
 ---
 

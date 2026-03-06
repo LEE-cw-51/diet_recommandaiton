@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -92,8 +93,10 @@ def parse_with_gemini(
     brand_name: str,
     naver_results: list[dict],
     haccp_label: dict,
+    main_category: str = "",
+    standard_product_name: str = "",
 ) -> dict:
-    """Gemini 1.5 Flash로 검색 결과를 구조화 JSON으로 파싱.
+    """Gemini 2.5 Flash로 검색 결과를 구조화 JSON으로 파싱.
 
     Returns:
         {
@@ -111,6 +114,7 @@ def parse_with_gemini(
 
     prompt = f"""[제품 정보]
 제품명: {product_name} / 제조사: {brand_name}
+카테고리: {main_category or "불명"} / 표준제품명: {standard_product_name or "불명"}
 
 [HACCP 공식 원재료명 및 알레르기 표시 (최우선 참고)]
 원재료명: {raw_label[:1000]}
@@ -130,17 +134,30 @@ def parse_with_gemini(
 
 주의사항:
 - HACCP 원재료명/알레르기 표시를 최우선 참고
+- HACCP 데이터가 없을 때는 카테고리/표준제품명을 참고해 일반적인 성분 추론
 - 원재료명에 명확히 나타난 성분만 true, 불확실하면 false
 - 가격은 naver_results 중 lprice 최솟값 사용 (lprice는 원 단위 문자열)
 """
 
-    response = _gemini_client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config=genai_types.GenerateContentConfig(
-            response_mime_type="application/json",
-        ),
-    )
+    MAX_RETRIES = 5
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = _gemini_client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=prompt,
+                config=genai_types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                ),
+            )
+            break
+        except Exception as e:
+            if "429" in str(e) and attempt < MAX_RETRIES - 1:
+                m = re.search(r"retry[^\d]*(\d+)", str(e), re.IGNORECASE)
+                delay = int(m.group(1)) + 5 if m else 35
+                print(f"\n  [Gemini] Rate limit, {delay}s 대기 후 재시도 ({attempt + 1}/{MAX_RETRIES - 1})...")
+                time.sleep(delay)
+            else:
+                raise
     parsed = json.loads(response.text)
 
     # allergens에 22종 키가 모두 있는지 보장 (누락 키 → false 기본값)
@@ -157,12 +174,13 @@ def parse_with_gemini(
 # 메인 파이프라인
 # ──────────────────────────────────────────────────────────────
 
-def run_step1(test_n: int | None = None, resume: bool = False) -> None:
+def run_step1(test_n: int | None = None, resume: bool = False, table: str = "food_master") -> None:
     """Step 1 파이프라인 실행.
 
     Args:
         test_n: 처리할 최대 행 수 (None → 전체)
         resume: True면 체크포인트 기반 재개
+        table: 대상 테이블명 (기본값: food_master)
     """
     sb = get_client()
 
@@ -170,17 +188,27 @@ def run_step1(test_n: int | None = None, resume: bool = False) -> None:
     if done_ids:
         print(f"체크포인트 로드: {len(done_ids)}개 이미 처리됨")
 
-    # food_research_sample 에서 처리 대상 로드
-    rows = (
-        sb.table("food_research_sample")
-        .select("id, product_name, brand_name")
-        .execute()
-        .data
-    )
+    # food_research_sample 에서 처리 대상 로드 (pagination for 2,524 rows)
+    rows = []
+    limit = 1000
+    offset = 0
+    while True:
+        batch = (
+            sb.table("food_research_sample")
+            .select("id, product_name, brand_name, main_category, standard_product_name")
+            .range(offset, offset + limit - 1)
+            .execute()
+            .data
+        )
+        if not batch:
+            break
+        rows.extend(batch)
+        offset += limit
+
     if test_n:
         rows = rows[:test_n]
 
-    print(f"처리 대상: {len(rows)}개 (전체 food_research_sample 중)")
+    print(f"처리 대상: {len(rows)}개  →  {table}")
     success = 0
     fail    = 0
 
@@ -199,27 +227,27 @@ def run_step1(test_n: int | None = None, resume: bool = False) -> None:
                 row["brand_name"],
                 data["naver_results"],
                 data["haccp_label"],
+                main_category=row.get("main_category") or "",
+                standard_product_name=row.get("standard_product_name") or "",
             )
 
-            # 3. Supabase UPSERT
-            # allergens 컬럼이 스키마 캐시에 없으면 PGRST204 발생
-            # → Supabase Dashboard > Settings > API > "Reload API Schema" 후 재시도
-            upsert_data = {
-                "product_name":   row["product_name"],
-                "brand_name":     row["brand_name"],
+            # 3. Supabase UPDATE (Step 0에서 이미 영양성분 복사됨 → 가격/알레르기만 갱신)
+            update_data = {
                 "price":          result.get("price"),
                 "allergens":      result.get("allergens", {}),
-                "raw_label_text": data["haccp_label"].get("rawmtrl", ""),
-                "is_verified":    False,
-                "data_source":    "haccp_naver_augmented",
+                "raw_label_text": data["haccp_label"].get("rawmtrl", "") or "",
                 "augmented_at":   "now()",
             }
-            resp = sb.table("food_master").upsert(
-                upsert_data,
-                on_conflict="product_name,brand_name",
-            ).execute()
-            # PostgREST는 에러 시 빈 data 반환하지 않고 예외를 던지므로
-            # execute() 자체가 성공하면 정상 처리됨
+            query = (
+                sb.table(table)
+                .update(update_data)
+                .eq("product_name", row["product_name"])
+            )
+            if row.get("brand_name"):
+                query = query.eq("brand_name", row["brand_name"])
+            else:
+                query = query.is_("brand_name", "null")
+            query.execute()
 
             done_ids.add(row["id"])
             save_checkpoint(done_ids)
@@ -229,7 +257,7 @@ def run_step1(test_n: int | None = None, resume: bool = False) -> None:
             print(f"\n  FAIL [{row['id']}] {row['product_name']}: {e}")
             fail += 1
 
-        time.sleep(0.5)  # Gemini rate limit 대응
+        time.sleep(3)  # Flash-Lite ~30 RPM → 2s 이상 필요; 여유분 포함
 
     print(f"\n완료 — 성공: {success}, 실패: {fail}")
     print(f"체크포인트: {CHECKPOINT_FILE} ({len(done_ids)}개)")
@@ -254,5 +282,10 @@ if __name__ == "__main__":
         action="store_true",
         help="체크포인트 기반 재개",
     )
+    parser.add_argument(
+        "--table",
+        default="food_master",
+        help="대상 테이블명 (기본값: food_master)",
+    )
     args = parser.parse_args()
-    run_step1(test_n=args.test, resume=args.resume)
+    run_step1(test_n=args.test, resume=args.resume, table=args.table)
