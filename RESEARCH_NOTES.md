@@ -105,7 +105,65 @@ SNACK은 레이블로는 존재하나 optimizer 식단 구성에 미포함 → �
 
 ---
 
-## 6. 향후 과제
+## 6. Step 2 구현 레퍼런스 (Context7 조회, 2026-03-08)
+
+### Groq JSON Mode 패턴
+
+```python
+# 핵심 호출 패턴 (llama-3.3-70b-versatile, JSON mode)
+client = Groq(max_retries=3)   # 자동 exponential backoff
+
+response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[
+        {"role": "system", "content": 'Classify food into MAIN/SIDE/DRINK/SNACK. Output: {"category_type": "..."}'},
+        {"role": "user",   "content": f"{product_name} | {brand_name} | {food_group}"}
+    ],
+    response_format={"type": "json_object"},  # JSON mode 활성화
+    temperature=0.1,   # 낮을수록 일관된 분류
+    max_tokens=32,     # 4개 카테고리 중 택1 → 32 토큰이면 충분
+)
+result = json.loads(response.choices[0].message.content)
+# → {"category_type": "MAIN"}
+```
+
+### 에러 처리 패턴
+
+```python
+try:
+    cat = classify_one(client, row)
+except groq.RateLimitError:
+    time.sleep(60)     # 1분 대기 후 재시도 (max_retries와 별개로 명시)
+except groq.APIConnectionError as e:
+    log(f"Connection error: {e.__cause__}")
+except groq.APIStatusError as e:
+    log(f"Status {e.status_code}: {e.response}")
+```
+
+### 설계 결정: Batch API 미사용
+Groq는 JSONL 배치 API(`client.files.create` + `client.batches.create`)를 지원하나,
+Step 2에서는 sleep loop + 체크포인트 방식을 유지:
+- 이유: 체크포인트(`.checkpoint/step2_done.json`) 통합이 단순, 실패 ID 즉시 파악 가능
+- Batch API는 완료까지 polling이 필요해 오히려 복잡도 증가
+
+### step2_food_classifier.py 구조 (예정)
+```
+sys.path.insert(0, ...)      # 경로 패치 (CLAUDE.md §10)
+from db.client import get_client
+CHECKPOINT = ".checkpoint/step2_done.json"
+VALID_CATEGORIES = {"MAIN", "SIDE", "DRINK", "SNACK"}
+main():
+  done_ids = load_checkpoint()
+  rows = supabase.food_master WHERE classified_at IS NULL (pagination 필수 — PostgREST 1,000행 한도)
+  for row not in done_ids:
+    cat = classify_one() → UPDATE category_type + classified_at
+    save_checkpoint(row.id)
+    time.sleep(2)
+```
+
+---
+
+## 7. 향후 과제
 
 - [ ] Step 2: category_type 전체 분류 (Groq LLaMA)
 - [ ] Step 3: `DailyDietOptimizer.from_supabase()` 구현, 알레르기 22종 확장
