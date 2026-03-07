@@ -138,7 +138,8 @@ def get_or_fetch(row: dict, delay: float = 0.5) -> dict:
     """캐시 우선 → 없으면 두 API 모두 호출 후 JSON 저장.
 
     Args:
-        row:   {"id": int, "product_name": str, "brand_name": str}
+        row:   {"id": int, "product_name": str, "brand_name": str,
+                "standard_product_name": str (optional, fallback용)}
         delay: API 호출 간 대기 시간 (초)
 
     Returns:
@@ -146,16 +147,30 @@ def get_or_fetch(row: dict, delay: float = 0.5) -> dict:
           "id": int,
           "query": str,
           "naver_results": [...],
+          "naver_fallback_results": [...],  # standard_product_name 재시도 결과
           "haccp_label": {...}
         }
     """
     cache_file = CACHE_DIR / f"{row['id']}.json"
 
     if cache_file.exists():
-        return json.loads(cache_file.read_text(encoding="utf-8"))
+        cached = json.loads(cache_file.read_text(encoding="utf-8"))
+        # 이미 fallback 시도됨 → 그대로 반환
+        if "naver_fallback_results" in cached:
+            return cached
+        # primary 결과 없고 standard_product_name으로 재시도 가능
+        std_name = row.get("standard_product_name") or ""
+        if not cached.get("naver_results") and std_name:
+            print(f"  [Naver] fallback: {std_name}")
+            cached["naver_fallback_results"] = search_naver_price(std_name)
+            time.sleep(delay)
+            cache_file.write_text(
+                json.dumps(cached, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        return cached
 
     query = f"{row['brand_name']} {row['product_name']}"
-
     naver_results = search_naver_price(query)
     time.sleep(delay)
     haccp_label = search_haccp_label(row["product_name"], row["brand_name"])
@@ -166,6 +181,14 @@ def get_or_fetch(row: dict, delay: float = 0.5) -> dict:
         "naver_results": naver_results,
         "haccp_label":   haccp_label,
     }
+
+    # primary 결과 없으면 standard_product_name으로 fallback
+    std_name = row.get("standard_product_name") or ""
+    if not naver_results and std_name:
+        print(f"  [Naver] fallback: {std_name}")
+        time.sleep(delay)
+        result["naver_fallback_results"] = search_naver_price(std_name)
+
     cache_file.write_text(
         json.dumps(result, ensure_ascii=False, indent=2),
         encoding="utf-8",

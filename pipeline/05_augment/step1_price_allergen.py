@@ -221,11 +221,12 @@ def run_step1(test_n: int | None = None, resume: bool = False, table: str = "foo
             data = get_or_fetch(row, delay=0.3)
             time.sleep(0.7)  # Naver 1,000 req/일 → 최소 0.086초 간격; 여유 있게
 
-            # 2. Gemini 파싱
+            # 2. Gemini 파싱 (primary 결과 없으면 fallback 사용)
+            best_naver = data.get("naver_results") or data.get("naver_fallback_results", [])
             result = parse_with_gemini(
                 row["product_name"],
                 row["brand_name"],
-                data["naver_results"],
+                best_naver,
                 data["haccp_label"],
                 main_category=row.get("main_category") or "",
                 standard_product_name=row.get("standard_product_name") or "",

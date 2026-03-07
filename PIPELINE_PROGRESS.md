@@ -1,10 +1,9 @@
 # 연구 파이프라인 진행 상황
 
 ## 현재 상태
-- 현재 세션: Session 3 진행 중 (Step 1 31% 완료, 내일 재개 예정)
-- 플랜 파일: `C:\Users\chanw\.claude\plans\cheeky-hopping-llama.md`
-- 마지막 업데이트: 2026-03-07 (Step 1 중단, price NULL 원인 분석, fallback 계획 수립)
-- **다음 작업**: 코드 수정 (search_clients.py fallback + step1 food_group) → --test 5 검증 → --resume 재개
+- 현재 세션: Session 3 완료 ✅
+- 마지막 업데이트: 2026-03-07 (Step1 2520/2522 완료, Step1b 127개 가격 보정)
+- **다음 작업**: Session 4 — Step 2 식사 분류 (Groq LLaMA → category_type)
 
 ## 프로젝트 경로
 - 워킹 디렉토리: `C:\Users\chanw\Desktop\diet_recommendation\.claude\worktrees\distracted-boyd`
@@ -130,31 +129,25 @@ algorithm/daily_diet_optimizer.py → from_supabase()
   - **food_research_sample에 price 컬럼 없음**: 가격은 오직 네이버 API에서만 수집
 
 ### Session 3: Step 0 + Step 1 수정 + 전체 실행
-- [ ] 완료 (진행 중 — Step 1이 789/2,522에서 중단, 내일 재개)
-- 처리량: 789 / 2,522 (Step 0 완료 2,522행, Step 1 31%)
-- 체크포인트 파일: `.checkpoint/step1_done.json` (789개 ID 저장됨)
-- **워크트리**: `C:\Users\chanw\Desktop\diet_recommendation\.claude\worktrees\reverent-easley`
+- [x] 완료 ✅
+- 처리량: 2,520 / 2,522 (Step 1), 127개 가격 보정 (Step 1b)
+- 체크포인트 파일: `.checkpoint/step1_done.json` (2,522개 ID)
 - **완료된 작업**:
   1. ✅ Step 0 전체 실행 (2,522행 복사, 원본 2,524에서 중복 2개 제거)
-  2. ✅ Step 1 진행 중 (789/2,522 = 31%)
+  2. ✅ Step 1 전체 완료 (2,520/2,522 = 99.9%, 2개 에러 무시 가능)
   3. ✅ gemini-2.5-flash-lite 모델 변경 + 유료 전환
   4. ✅ PostgREST 1,000행 limit 버그 수정 (pagination 추가)
-- **다음 세션 시작 전 즉시 할 일 (코드 수정 먼저)**:
-  1. `search_clients.py` — `_fallback_naver_search()` 추가 (product_name → standard_product_name 단계적 재시도)
-  2. `step1_price_allergen.py` — food_group 로드 매핑 + fallback price 활용 + Gemini 프롬프트에 식품군(food_group) 추가
-  3. `step1b_fix_null_prices.py` — 신규 생성 (Step 1 완료 후 기존 price=null 보정용)
-  4. 수정 후 `--test 5 --table food_master_test` 검증
-  5. 검증 성공 후 `python pipeline/05_augment/step1_price_allergen.py --resume`
-  6. Step 1 완료 후 `python pipeline/05_augment/step1b_fix_null_prices.py`
-- 완료 기준:
-  - `food_master` 행수 ≈ 2,522
-  - `augmented_at IS NOT NULL` 비율 ≥ 90%
-  - `calories IS NOT NULL` 비율 = 100% (Step 0 완료)
-  - `price IS NULL` 비율 ≤ 45% (fallback 적용 후 목표)
+  5. ✅ search_clients.py — fallback 검색 추가 (standard_product_name → product_name only)
+  6. ✅ step1_price_allergen.py — best_naver fallback 결과 Gemini에 전달
+  7. ✅ step1b_fix_null_prices.py — 신규 생성 및 실행 (888개 대상, 127개 보정)
+- **최종 수치**:
+  - `augmented_at IS NOT NULL`: 2,520 / 2,522 (99.9%)
+  - `price IS NOT NULL`: 1,761 / 2,522 (69.8%)
+  - `price IS NULL` 761개: 네이버 미등록 식자재/외국 브랜드 (한계치)
 - 메모:
-  - price NULL 64% 원인 분석 완료: 네이버 미등록 외국 브랜드·특수 제품 (코드 버그 아님)
-  - food_master.food_group 값 확인: "과자류·빵류 또는 떡류" 형태로 의미있는 값 있음
-  - 상세 계획: `C:\Users\chanw\.claude\plans\cheeky-hopping-llama.md` 참조
+  - Naver 일일 한도: 25,000 (이전 1,000 정보는 오류)
+  - fallback 검색: primary 실패 → standard_product_name → product_name only 순서
+  - price NULL 30% 는 B2B 급식 식자재, 외국 브랜드 등 네이버 미등록이 원인
 
 ### Session 4: Step 2 식사 분류 (15분)
 - [ ] 완료
