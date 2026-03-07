@@ -1,9 +1,9 @@
 # 연구 파이프라인 진행 상황
 
 ## 현재 상태
-- 현재 세션: Session 3 완료 ✅
-- 마지막 업데이트: 2026-03-07 (Step1 2520/2522 완료, Step1b 127개 가격 보정)
-- **다음 작업**: Session 4 — Step 2 식사 분류 (Groq LLaMA → category_type)
+- 현재 세션: Session 4 리서치 완료 (Step 2 코드 작성 전)
+- 마지막 업데이트: 2026-03-08 (category_type 4개 분류 리서치 완료, Step 2 설계 완료)
+- **다음 작업**: Session 4 계속 — `step2_food_classifier.py` 작성 → `--test 5` → `--resume`
 
 ## 프로젝트 경로
 - 워킹 디렉토리: `C:\Users\chanw\Desktop\diet_recommendation\.claude\worktrees\distracted-boyd`
@@ -149,11 +149,35 @@ algorithm/daily_diet_optimizer.py → from_supabase()
   - fallback 검색: primary 실패 → standard_product_name → product_name only 순서
   - price NULL 30% 는 B2B 급식 식자재, 외국 브랜드 등 네이버 미등록이 원인
 
-### Session 4: Step 2 식사 분류 (15분)
-- [ ] 완료
-- 분류 분포: MAIN:-, SIDE:-, DRINK:-, SNACK:-
+### Session 4: category_type 리서치 + Step 2 계획 수립
+- [ ] 완료 (리서치 ✅, Step 2 코드 작성 미완)
 - 완료 기준: `food_master.category_type` 전체 채워짐
-- 메모:
+
+#### 리서치 결과 (2026-03-08)
+- **결론**: 4개 카테고리(MAIN/SIDE/DRINK/SNACK) 충분 — 국제/한국 기준 모두 부합
+- **SNACK 구조 문제 발견**: `DietOptimizationProblem`의 `n_var=4`는 MAIN/SIDE×2/DRINK만 사용.
+  SNACK은 `FoodCategorizer`와 DB에는 정의돼 있지만 optimizer에서 실제 식단 추천에 포함 안됨.
+- **권장**: Step 2는 4개 레이블 그대로 사용, SNACK은 향후 확장 예비용으로 유지
+
+#### 참고 논문 (카테고리 분류 체계)
+| 논문 | 카테고리 | URL |
+|------|---------|-----|
+| MealRec (SIGIR 2022) | 3개/끼니: appetizer+main+dessert | https://arxiv.org/abs/2205.12133 |
+| MealRec+ (SIGIR 2024) | 11개 세분류 | https://arxiv.org/abs/2404.05386 |
+| PMC Chinese Meal Rec (2024) | 6가지 dish 구성 | https://pmc.ncbi.nlm.nih.gov/articles/PMC11176883/ |
+| Korean Diet Score (PMC 2013) | 6 food groups | https://pmc.ncbi.nlm.nih.gov/articles/PMC3572226/ |
+
+#### Step 2 구현 계획 (다음 세션에서 실행)
+- 스크립트: `pipeline/05_augment/step2_food_classifier.py` (신규)
+- API: Groq LLaMA 3.1 8B (GROQ_API_KEY)
+- 소스: `food_master WHERE classified_at IS NULL`
+- 입력: product_name + brand_name + food_group
+- 출력: `{"category_type": "MAIN|SIDE|DRINK|SNACK"}`
+- 업데이트: `food_master.category_type`, `food_master.classified_at`
+- 체크포인트: `.checkpoint/step2_done.json`
+- Rate limit: 30 req/min → sleep(2) per item ≈ 84분 소요
+
+- 메모: CLAUDE.md Rule 2 준수 — `--test 5` 먼저, 전체 실행은 사용자 확인 후
 
 ### Session 5: 알고리즘 연동 (2시간)
 - [ ] 완료
