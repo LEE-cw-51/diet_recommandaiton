@@ -75,6 +75,16 @@
 ### Session 4 (2026-03-08) — category_type 리서치
 주요 작업: 4개 카테고리 충분성 분석, 참고 논문 조사, Step 2 계획 수립
 
+### Session 5 (2026-03-08) — Step 2 설계 확정
+주요 작업: step2_food_classifier.py 설계 완료 (코드 미작성, 다음 세션에 구현)
+
+**설계 결정**:
+- 모델: `llama-3.1-8b-instant` (6,000 RPD로 2,522개 당일 완주)
+- 프롬프트에 영양성분(calories, carbs, protein, fat) 포함 → 분류 정확도 향상
+- 시스템 프롬프트에 한국 식품공전(NFIS) + 식품의약품안전처 + HACCP 분류 기준 명시
+- DDL 불필요: `category_type` + `classified_at` 컬럼 `001_add_allergens.sql`에서 이미 추가됨
+- `category_type IS NULL` 필터로 미분류 행만 처리
+
 ---
 
 ## 4. 기술적 어려움 & 해결 방법 (전체 이슈 로그)
@@ -146,20 +156,30 @@ Step 2에서는 sleep loop + 체크포인트 방식을 유지:
 - 이유: 체크포인트(`.checkpoint/step2_done.json`) 통합이 단순, 실패 ID 즉시 파악 가능
 - Batch API는 완료까지 polling이 필요해 오히려 복잡도 증가
 
-### step2_food_classifier.py 구조 (예정)
+### step2_food_classifier.py 구조 (Session 5 확정)
+
+**설계 결정**: 영양성분(calories, carbs, protein, fat) + 식품군(food_group, NFIS 분류)을 프롬프트에 포함
+- 이유: 영양성분 패턴으로 카테고리 추론 정확도 향상 (탄수화물↑ → MAIN, 액상 저열량 → DRINK 등)
+- 시스템 프롬프트에 한국 식품공전, 식품의약품안전처, HACCP 분류 기준을 LLM 지식으로 참고하도록 명시
+
 ```
 sys.path.insert(0, ...)      # 경로 패치 (CLAUDE.md §10)
 from db.client import get_client
 CHECKPOINT = ".checkpoint/step2_done.json"
 VALID_CATEGORIES = {"MAIN", "SIDE", "DRINK", "SNACK"}
+SYSTEM_PROMPT = "한국 식품공전(NFIS), 식품의약품안전처, HACCP 기준으로 MAIN/SIDE/DRINK/SNACK 분류..."
 main():
   done_ids = load_checkpoint()
-  rows = supabase.food_master WHERE classified_at IS NULL (pagination 필수 — PostgREST 1,000행 한도)
+  rows = supabase.food_master WHERE category_type IS NULL (pagination 필수 — PostgREST 1,000행 한도)
+         SELECT: id, product_name, brand_name, food_group, protein, carbs, fat, calories
   for row not in done_ids:
-    cat = classify_one() → UPDATE category_type + classified_at
+    cat = classify_with_groq(product_name, brand_name, food_group, protein, carbs, fat, calories)
+    UPDATE category_type + classified_at
     save_checkpoint(row.id)
     time.sleep(2)
 ```
+
+**모델**: `llama-3.1-8b-instant` (분류 태스크에 충분, Groq 6,000 RPD로 당일 완주 가능)
 
 ---
 

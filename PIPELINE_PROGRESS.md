@@ -13,15 +13,17 @@
 | Step 2 | Groq LLaMA → category_type 분류 | ⏳ | 0/2,522 |
 | Step 3 | 알고리즘 연동 (from_supabase + 22종 알레르기) | ⏳ | — |
 
-## Step 2 구현 계획
+## Step 2 구현 계획 (Session 5 확정)
 - 스크립트: `pipeline/05_augment/step2_food_classifier.py`
-- API: Groq LLaMA 3.1 8B (`GROQ_API_KEY`), `client = Groq(max_retries=3)`
-- 소스: `food_master WHERE classified_at IS NULL`
-- 입력: `product_name + brand_name + food_group`
+- API: Groq LLaMA 3.1 8B (`GROQ_API_KEY`), `model="llama-3.1-8b-instant"`, `client = Groq(max_retries=3)`
+- 소스: `food_master WHERE category_type IS NULL` (pagination 1,000행씩)
+- 입력 (프롬프트): `product_name + brand_name + food_group + calories + carbs + protein + fat`
+- 시스템 프롬프트: 한국 식품공전(NFIS), 식품의약품안전처, HACCP 분류 기준 명시
 - 출력: `{"category_type": "MAIN|SIDE|DRINK|SNACK"}`
-- UPDATE: `category_type`, `classified_at`
+- UPDATE: `category_type`, `classified_at = now()`
 - 체크포인트: `.checkpoint/step2_done.json`
 - Rate limit: `groq.RateLimitError` catch + sleep(60) 재시도 → 약 84분 소요
+- DDL 불필요: `category_type` + `classified_at` 컬럼 이미 존재 (`001_add_allergens.sql`)
 
 ## 아키텍처
 ```
