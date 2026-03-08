@@ -1,8 +1,8 @@
 # 파이프라인 진행 상황
 
 ## 현재 상태
-- **다음 작업**: Session 5 — `step2_food_classifier.py` 작성 → `--test 5` → `--resume`
-- 마지막 업데이트: 2026-03-08
+- **다음 작업**: Session 7 — Step 1b 재실행(신규 행 가격 조회) → `step2_food_classifier.py` 작성 → `--test 5` → `--resume`
+- 마지막 업데이트: 2026-03-09
 
 ## 단계별 완료 현황
 | 단계 | 내용 | 상태 | 수치 |
@@ -10,7 +10,9 @@
 | Step 0 | food_research_sample → food_master bulk copy | ✅ | 2,522행 |
 | Step 1 | 네이버 가격 + HACCP 알레르기 UPDATE | ✅ | 2,520/2,522 (99.9%) |
 | Step 1b | price NULL 보정 (fallback 검색) | ✅ | 127개 보정, 최종 1,761개 유가격 (69.8%) |
-| Step 2 | Groq LLaMA → category_type 분류 | ⏳ | 0/2,522 |
+| Step 0b | final_nutrition_db.csv → food_master INSERT | ✅ | 850/871 성공 (97.6%), 21개 실패(--resume 재시도 가능) |
+| Step 1b 재실행 | 신규 행 price 조회 (Naver) | ⏳ | 0/신규행 |
+| Step 2 | Groq LLaMA → category_type 분류 | ⏳ | 0/(2,522+850) |
 | Step 3 | 알고리즘 연동 (from_supabase + 22종 알레르기) | ⏳ | — |
 
 ## Step 2 구현 계획 (Session 5 확정)
@@ -32,6 +34,12 @@ food_research_sample (2,524행)
 food_master (2,522행, 영양성분 채워진 상태)
   ↓ [Step 1] 네이버 가격 + HACCP 알레르기 → Gemini 파싱
 food_master (price 69.8% 채워짐, allergens JSON)
+
+data/processed/final_nutrition_db.csv (871행, 프랜차이즈 메뉴)
+  ↓ [Step 0b] Gemini allergens 파싱 + UPSERT
+food_master (+850행, price=NULL)
+  ↓ [Step 1b 재실행] Naver 가격 조회
+food_master (신규 행 price 채움)
   ↓ [Step 2] Groq LLaMA 3.1 8B
 food_master (category_type: MAIN/SIDE/DRINK/SNACK)
   ↓ [Step 3] algorithm/daily_diet_optimizer.py → from_supabase()

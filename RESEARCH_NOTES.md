@@ -85,6 +85,22 @@
 - DDL 불필요: `category_type` + `classified_at` 컬럼 `001_add_allergens.sql`에서 이미 추가됨
 - `category_type IS NULL` 필터로 미분류 행만 처리
 
+### Session 6 (2026-03-09) — Step 0b: 프랜차이즈 CSV import
+주요 작업: `data/processed/final_nutrition_db.csv` (871행) → food_master INSERT
+
+**설계 결정**:
+- `step0b_csv_import.py` 신규 작성 (`pipeline/05_augment/`)
+- CSV price 컬럼 신뢰도 낮음(크롤링+랜덤 혼재) → price=NULL 저장, Step 1b 재실행으로 채움
+- `allergens_scraped` 원문 텍스트 → Gemini 2.5 Flash-Lite로 22종 JSONB 파싱
+- `category` 컬럼(매장 카테고리) 버림, `food_group=NULL`
+- 워크트리 환경 대응: `CSV_PATH` 폴백 로직 (`_ROOT` vs `_ROOT.parent.parent.parent`)
+- 체크포인트: `.checkpoint/step0b_done.json` (set[str], 키="menu_name|store_name")
+
+**실행 결과**:
+- `--test 5`: 성공 5/5, allergens JSONB 정상 (닭고기/쇠고기/돼지고기 true 확인)
+- `--resume` 전체: 850/871 성공 (97.6%), 21개 실패 (`--resume` 재시도 가능)
+- 브랜드: BurgerKing, CU, GS25, McDonalds, Lotteria, 이마트24, Subway, Salady 등
+
 ---
 
 ## 4. 기술적 어려움 & 해결 방법 (전체 이슈 로그)
@@ -100,6 +116,8 @@
 | S3 | PostgREST 기본 1,000행 limit | pagination 루프 추가 |
 | S3 | ON CONFLICT 배치 내 중복 | step0에 deduplication 로직 추가 |
 | S3 | price NULL 64% | fallback 검색 로직 + step1b 보정 스크립트 |
+| S6 | CSV price 신뢰도 낮음 (랜덤값 혼재) | price=NULL로 저장, Step 1b 재실행으로 Naver 조회 |
+| S6 | 워크트리에서 data/ 경로 없음 | CSV_PATH 폴백 로직 (main repo → worktree 순서) |
 
 ---
 
@@ -185,7 +203,10 @@ main():
 
 ## 7. 향후 과제
 
-- [ ] Step 2: category_type 전체 분류 (Groq LLaMA)
+- [x] Step 0b: final_nutrition_db.csv → food_master INSERT (850/871 완료)
+- [ ] Step 0b 잔여 21개 재시도: `step0b_csv_import.py --resume`
+- [ ] Step 1b 재실행: 신규 행(프랜차이즈 메뉴) price Naver 조회
+- [ ] Step 2: category_type 전체 분류 (Groq LLaMA) — 대상: 2,522+850행
 - [ ] Step 3: `DailyDietOptimizer.from_supabase()` 구현, 알레르기 22종 확장
-- [ ] price NULL 30% (761개) 처리 방안 — 크롤링 또는 수동 입력 검토
+- [ ] price NULL 처리 — 프랜차이즈 메뉴는 Naver 조회율 낮을 가능성 있음
 - [ ] HACCP API 안정화 — V3 엔드포인트 재시도 또는 대체 소스 탐색
