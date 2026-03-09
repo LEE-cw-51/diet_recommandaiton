@@ -101,6 +101,50 @@
 - `--resume` 전체: 850/871 성공 (97.6%), 21개 실패 (`--resume` 재시도 가능)
 - 브랜드: BurgerKing, CU, GS25, McDonalds, Lotteria, 이마트24, Subway, Salady 등
 
+### Session 7 (2026-03-10) — Step 1c / Step 2 / Step 2b / Step 2c 설계
+
+#### Step 1c: 프랜차이즈 가격 조회
+- 스크립트: `pipeline/05_augment/step1c_franchise_prices.py` 신규 작성
+- 대상: `food_master WHERE price IS NULL AND data_source='final_nutrition_db'` (846행)
+- 방법: Naver webkr 검색 (`openapi.naver.com/v1/search/webkr.json`) → 스니펫 수집 → Gemini 2.5 Flash-Lite price 파싱
+- 결과: 564/846 UPDATE, 25 실패, 체크포인트 825개
+
+#### Step 2: Gemini 2.5 Flash-Lite 카테고리 분류 (v1→v2 전환)
+- v1 (Groq LLaMA-3.1-8B): TPM 6,000/min 초과 → 923개 분류 후 중단
+- v2 (Gemini 2.5 Flash-Lite): `google.genai` SDK, `response_mime_type="application/json"` → 나머지 ~2,449개 약 41분 완료
+- 최종 결과: 3,372/3,372 (100%), 503 ServiceUnavailable fallback(→MAIN) ~0.5% (~15개)
+- **분류 체계 확장**: 4-class(MAIN/SIDE/DRINK/SNACK) → **5-class(+SOUP)**
+  - SOUP 추가 근거: 국/찌개/탕/라면류는 고나트륨·국물+고형물 혼합 구조로 MAIN과 구분되는 영양 프로파일 보유. optimizer의 SIDE 슬롯에 병합 처리(cat_keys에 SOUP 추가)
+
+#### Step 2b: 영양성분 불량 행 데이터 클렌징
+- 0칼로리 또는 전 영양소 근零인 행 14개 SQL로 삭제 (`calories < 5 AND protein < 1 ...`)
+- 최종 3,358행, 카테고리 분포: SNACK 1,101 / MAIN 957 / SIDE 688 / DRINK 441 / SOUP 171
+
+#### Step 2c: price 이상치 처리 (설계 완료)
+
+**이상치 탐지 방법: Tukey's Fence (IQR 1.5×)**
+- 근거: 비모수적, 정규분포 미가정, 식품 가격처럼 skewed 분포에 적합 (Tukey 1977)
+- 카테고리별 별도 fence 계산 (SNACK vs SOUP는 가격대가 다름)
+- 탐지 결과: LOW 16개(< 500원) + HIGH 126개 = 총 142개
+
+| 카테고리 | 상한 fence | HIGH 이상치 |
+|---------|----------|-----------|
+| MAIN | 24,625원 | 23개 |
+| SOUP | 43,830원 | 13개 |
+| SIDE | 35,250원 | 24개 |
+| DRINK | 53,500원 | 27개 |
+| SNACK | 39,965원 | 39개 |
+
+**처리 계획**:
+- Phase 1: SQL로 price < 500인 16개 → NULL (단가로 불가능한 가격)
+- Phase 2: `step2c_price_outlier_fix.py` — HIGH 126개 Naver webkr 재검색 → fence 내 가격 UPDATE 또는 NULL
+- Phase 3: Claude in Chrome MCP로 Naver Shopping 직접 검색 (재검색 실패 우선순위 항목)
+
+**LLM Zero-shot 분류 방법론 한계 및 향후 검증**
+- 한계: 시스템 프롬프트의 영양성분 설명이 절대값 임계값이 아닌 상대적 표현 → 분류 기준 재현성 제한
+- 향후: 사용자 피드백 루프 도입 — 추천 결과 검토 시 오분류 발견 → 수동 교정으로 정확도 평가
+- 참고: RecBole, MealRec 등 추천 시스템에서도 카테고리 레이블 품질은 downstream task 성능으로 평가
+
 ---
 
 ## 4. 기술적 어려움 & 해결 방법 (전체 이슈 로그)
@@ -118,6 +162,9 @@
 | S3 | price NULL 64% | fallback 검색 로직 + step1b 보정 스크립트 |
 | S6 | CSV price 신뢰도 낮음 (랜덤값 혼재) | price=NULL로 저장, Step 1b 재실행으로 Naver 조회 |
 | S6 | 워크트리에서 data/ 경로 없음 | CSV_PATH 폴백 로직 (main repo → worktree 순서) |
+| S7 | Groq TPM 6,000/min 초과 → 분류 923개에서 중단 | Gemini 2.5 Flash-Lite로 전환, 나머지 2,449개 완료 |
+| S7 | Gemini 503 ServiceUnavailable (~0.5% 빈도) | except 503 → MAIN fallback, 알고리즘 영향 없음 |
+| S7 | price 이상치 (최솟값 9원 ~ 최댓값 1,440,000원) | IQR 1.5× Tukey's fence per category, Naver 재검색 → NULL |
 
 ---
 
@@ -204,9 +251,10 @@ main():
 ## 7. 향후 과제
 
 - [x] Step 0b: final_nutrition_db.csv → food_master INSERT (850/871 완료)
-- [ ] Step 0b 잔여 21개 재시도: `step0b_csv_import.py --resume`
-- [ ] Step 1b 재실행: 신규 행(프랜차이즈 메뉴) price Naver 조회
-- [ ] Step 2: category_type 전체 분류 (Groq LLaMA) — 대상: 2,522+850행
+- [x] Step 1c: 프랜차이즈 가격 조회 (564/846 업데이트)
+- [x] Step 2: category_type 전체 분류 (3,372/3,372, Gemini 2.5 Flash-Lite)
+- [x] Step 2b: 영양성분 불량 행 14개 삭제 → 최종 3,358행
+- [ ] Step 2c: price 이상치 처리 — Phase 1 SQL + Phase 2 Naver 재검색 + Phase 3 브라우저
 - [ ] Step 3: `DailyDietOptimizer.from_supabase()` 구현, 알레르기 22종 확장
-- [ ] price NULL 처리 — 프랜차이즈 메뉴는 Naver 조회율 낮을 가능성 있음
+- [ ] LLM 분류 검증: 랜덤 샘플 확인 + 사용자 피드백 루프 구축
 - [ ] HACCP API 안정화 — V3 엔드포인트 재시도 또는 대체 소스 탐색

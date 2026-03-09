@@ -105,9 +105,10 @@ def calculate_macro_grams(target_cal, user_goal, weight):
 class FoodCategorizer:
     def __init__(self):
         self.keywords = {
-            'MAIN': ['도시락', '덮밥', '비빔밥', '볶음밥', '김밥', '주먹밥', '삼각김밥', '리조또', '국밥', '죽', 
-                     '버거', '샌드위치', '토스트', '핫도그', '피자', '베이글', '라면', '우동', '국수', '파스타', '스파게티', '면', '짜장', '짬뽕'],
-            'SIDE': ['샐러드', '닭가슴살', '치킨', '핫바', '소시지', '후랑크', '계란', '두부', '김치', '수프', '국', '찌개', '너겟', '감자', '스틱'],
+            'MAIN': ['도시락', '덮밥', '비빔밥', '볶음밥', '김밥', '주먹밥', '삼각김밥', '리조또', '국밥', '죽',
+                     '버거', '샌드위치', '토스트', '핫도그', '피자', '베이글', '국수', '파스타', '스파게티', '면', '짜장'],
+            'SOUP': ['국', '찌개', '탕', '라면', '우동', '짬뽕', '수프', '곰탕', '설렁탕', '순대국', '감자탕'],
+            'SIDE': ['샐러드', '닭가슴살', '치킨', '핫바', '소시지', '후랑크', '계란', '두부', '김치', '너겟', '감자', '스틱'],
             'DRINK': ['물', '워터', '아메리카노', '커피', '라떼', '우유', '두유', '유산균', '주스', '에이드', '콜라', '사이다', '티', '차', '음료', '비타'],
             'SNACK': ['과자', '칩', '쿠키', '빵', '케이크', '젤리', '초콜릿', '바', '아이스크림', '팝콘', '맛밤', '육포', '오징어']
         }
@@ -128,7 +129,7 @@ class DiversityManager:
             '매운', '핫', '스파이시'
         ]
         self.allergy_features = ['난류', '알류', '계란', '우유', '땅콩', '견과', '복숭아', '토마토', '밀', '대두']
-        self.cat_keys = ['MAIN', 'SIDE', 'DRINK', 'SNACK'] 
+        self.cat_keys = ['MAIN', 'SOUP', 'SIDE', 'DRINK', 'SNACK']
 
     def create_vector(self, item):
         vector = []
@@ -323,7 +324,9 @@ class DailyDietOptimizer:
             brand_db = self.brand_menu_map[selected_brand]
             
             mains = self.filter_by_allergens(brand_db.get('MAIN', []), allergies_to_avoid)
-            sides = self.filter_by_allergens(brand_db.get('SIDE', []), allergies_to_avoid)
+            sides = self.filter_by_allergens(
+                brand_db.get('SIDE', []) + brand_db.get('SOUP', []), allergies_to_avoid
+            )
             drinks = self.filter_by_allergens(brand_db.get('DRINK', []), allergies_to_avoid)
             
             mains = [m for m in mains if m.get('FOOD_CODE') not in excluded_codes]
