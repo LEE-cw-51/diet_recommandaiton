@@ -1,8 +1,8 @@
 # 파이프라인 진행 상황
 
 ## 현재 상태
-- **다음 작업**: Step 2c 실행 (Phase 1 SQL → Phase 2 스크립트 → Phase 3 브라우저)
-- 마지막 업데이트: 2026-03-10 (Session 7, step2c 스크립트 작성 완료)
+- **다음 작업**: Step 3 — `DailyDietOptimizer.from_supabase()` 구현 (Supabase → 알고리즘 연동)
+- 마지막 업데이트: 2026-03-10 (Session 7 종료, Step 2c SQL 완료)
 
 ## 단계별 완료 현황
 | 단계 | 내용 | 상태 | 수치 |
@@ -14,7 +14,7 @@
 | Step 1c | 프랜차이즈 가격 조회 (Naver webkr → Gemini) | ✅ | 564/846 업데이트, 25 실패, 체크포인트 825개 |
 | Step 2 | Gemini 2.5 Flash-Lite → category_type 분류 (5-class) | ✅ | 3,372/3,372 (100%), 503 fallback ~0.5% |
 | Step 2b | 영양성분 불량 행 데이터 클렌징 | ✅ | 14개 삭제, 최종 3,358행 (SNACK 1,101 / MAIN 957 / SIDE 688 / DRINK 441 / SOUP 171) |
-| Step 2c | price 이상치 처리 (IQR 1.5× + Naver 재검색) | ⏳ | LOW 16개 / HIGH 126개 탐지 |
+| Step 2c | price 이상치 처리 (IQR Tukey's fence → SQL NULL) | ✅ | LOW 16개 + HIGH 126개 → NULL (SQL 일괄 처리) |
 | Step 3 | 알고리즘 연동 (from_supabase + 22종 알레르기) | ⏳ | — |
 
 ## Step 2c 설계
