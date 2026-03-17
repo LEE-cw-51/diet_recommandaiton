@@ -1,0 +1,30 @@
+experiment_id: daily_exp2_nsga2_base
+
+problem:
+  class: DailyExp2Problem
+  n_obj: 3
+  n_meals: 3            # 하루 식사 횟수 (2 or 3)
+  include_snack: false  # 간식 슬롯 포함 여부 (true로 변경 시 결정변수 +1)
+  nutrition_profile:
+    label: base_50_20_30
+    r_C: 0.500   # 탄수화물 목표 비율
+    r_P: 0.200   # 단백질 목표 비율
+    r_F: 0.300   # 지방 목표 비율
+    w_C: 0.333   # (DailyExp2에서는 f2에 미사용, 일관성용 보존)
+    w_P: 0.333
+    w_F: 0.334
+
+algorithm:
+  name: NSGA2
+  pop_size: 200
+  n_gen: 200
+  crossover:
+    n_points: 2
+    prob: 0.9
+  mutation:
+    prob: 0.083   # 권장: 1/n_var = 1/12 ≈ 0.083 (n_meals=3 기준)
+    eta: 20
+
+runner:
+  n_runs: 30
+  seed_start: 42

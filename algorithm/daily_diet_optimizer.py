@@ -292,14 +292,85 @@ class DailyDietOptimizer:
 
     def filter_by_allergens(self, dishes, allergies_to_avoid):
         if not allergies_to_avoid: return dishes
-        allergens_lower = [a.lower() for a in allergies_to_avoid]
         safe_menu_items = []
         for item in dishes:
-            is_safe = True
-            for allergen in allergens_lower:
-                if allergen in item['allergens_scraped']: is_safe = False; break
-            if is_safe: safe_menu_items.append(item)
+            allergens = item.get('allergens', item.get('allergens_scraped', ''))
+            if isinstance(allergens, dict):
+                # from_supabase(): {"난류": true, ...} 형태
+                if not any(allergens.get(a, False) for a in allergies_to_avoid):
+                    safe_menu_items.append(item)
+            else:
+                # from_csv(): 문자열 형태
+                allergens_lower = str(allergens).lower()
+                if not any(a.lower() in allergens_lower for a in allergies_to_avoid):
+                    safe_menu_items.append(item)
         return safe_menu_items
+
+    @classmethod
+    def from_supabase(cls, cal_min: float = 10.0) -> "DailyDietOptimizer":
+        """Supabase food_master 테이블에서 데이터를 불러와 optimizer를 초기화합니다.
+
+        pagination(range 1,000행 단위)으로 전체 3,358행을 로딩.
+        allergens 컬럼은 JSONB dict {"알레르겐명": bool, ...} 형식.
+        """
+        from db.client import get_client
+        print("⚙️ Supabase에서 food_master 로딩 중...")
+        sb = get_client()
+        rows = []
+        offset = 0
+        while True:
+            resp = (
+                sb.table("food_master")
+                .select("id,menu_name,store_name,category_type,"
+                        "calories,protein,carbs,fat,sugars,sodium,price,allergens")
+                .range(offset, offset + 999)
+                .execute()
+            )
+            batch = resp.data
+            if not batch:
+                break
+            rows.extend(batch)
+            print(f"  로딩 중... {len(rows)}행")
+            if len(batch) < 1000:
+                break
+            offset += 1000
+
+        print(f"  총 {len(rows)}행 로딩 완료")
+
+        obj = cls.__new__(cls)
+
+        df = pd.DataFrame(rows)
+        numeric_cols = ['calories', 'protein', 'carbs', 'fat', 'sugars', 'sodium', 'price']
+        for col in numeric_cols:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df['price'] = df['price'].fillna(0)
+        df = df[df['calories'] > cal_min]
+        df = df[df['price'] > 500]
+
+        # allergens: JSONB dict {"난류": true, ...} 또는 None → {} 정규화
+        df['allergens'] = df['allergens'].apply(
+            lambda v: v if isinstance(v, dict) else {}
+        )
+
+        obj.df = df
+        obj.categorizer = FoodCategorizer()
+        obj.df = obj.df.copy()
+        obj.df['category_tag'] = obj.df['menu_name'].apply(
+            lambda name: obj.categorizer.assign_category(name if isinstance(name, str) else '')
+        )
+        obj.menu_items = obj.df.to_dict('records')
+        obj.brand_menu_map = {}
+        for item in obj.menu_items:
+            brand = item.get('store_name', 'Unknown') or 'Unknown'
+            cat = item['category_tag']
+            if brand not in obj.brand_menu_map:
+                obj.brand_menu_map[brand] = {c: [] for c in obj.categorizer.keywords.keys()}
+            if cat in obj.brand_menu_map[brand]:
+                obj.brand_menu_map[brand][cat].append(item)
+        obj.div_manager = DiversityManager()
+
+        print(f"✅ from_supabase() 초기화 완료: {len(obj.menu_items)}개 메뉴, {len(obj.brand_menu_map)}개 브랜드")
+        return obj
 
     def recommend_daily_diet(self, target_cal, target_prot, target_carbs, target_fat, user_goal, 
                              allergies_to_avoid=[], excluded_codes=None, excluded_brands=None, **kwargs):

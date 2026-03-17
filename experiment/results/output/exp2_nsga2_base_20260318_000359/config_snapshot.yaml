@@ -1,0 +1,36 @@
+# 실험 2: 3목적 최적화 — NSGA-II (보건복지부 2025 기준 중앙값)
+#
+# f1 = |Cal(x)-Cal*| / Cal*
+# f2 = sqrt((r_C(x)-r_C*)^2 + (r_P(x)-r_P*)^2 + (r_F(x)-r_F*)^2)
+# f3 = |Price(x)-Price*| / Price*
+# g1 = allergen constraint (사전 필터링으로 항상 충족)
+
+experiment_id: exp2_nsga2_base
+
+problem:
+  class: Exp2Problem
+  n_obj: 3
+  nutrition_profile:
+    label: base_50_20_30
+    r_C: 0.500      # 탄수화물 50.0%
+    r_P: 0.200      # 단백질 20.0%
+    r_F: 0.300      # 지방 30.0%  → 합산 100%
+    w_C: 0.3333     # Exp2에서는 미사용 (f2는 유클리드 거리로 동일 가중치)
+    w_P: 0.3333
+    w_F: 0.3334
+
+algorithm:
+  name: NSGA2
+  pop_size: 200
+  n_gen: 200
+  crossover:
+    n_points: 2
+    prob: 0.9
+  mutation:
+    prob: 0.1
+    eta: 20
+  eliminate_duplicates: true
+
+runner:
+  n_runs: 30
+  seed_start: 42   # seeds = 42, 43, ..., 71
