@@ -185,20 +185,49 @@ class KGManager:
         """
         kg = cls()
 
+        def _resolve_menu_id(item: dict) -> str:
+            raw_id = item.get("id")
+            if raw_id not in (None, ""):
+                return str(raw_id)
+
+            name = str(item.get("product_name") or item.get("menu_name") or "")
+            brand = str(item.get("brand_name") or "")
+            if name and brand:
+                return f"{name}|{brand}"
+            return name
+
+        alias_to_menu_ids: dict[str, set[str]] = {}
+
         # 전체 음식 메뉴 노드 등록
         for item in all_foods:
-            mid = str(item.get("product_name") or item.get("menu_name") or "")
+            mid = _resolve_menu_id(item)
             cat = item.get("category", "UNKNOWN")
             if mid:
                 kg.add_menu(mid, cat)
 
+                for alias in (
+                    item.get("id"),
+                    item.get("product_name"),
+                    item.get("menu_name"),
+                ):
+                    alias_str = str(alias or "")
+                    if alias_str:
+                        alias_to_menu_ids.setdefault(alias_str, set()).add(mid)
+
+        def _normalize_target_id(raw_target_id: str) -> str:
+            target_id = str(raw_target_id)
+            mapped_ids = alias_to_menu_ids.get(target_id)
+            if mapped_ids and len(mapped_ids) == 1:
+                return next(iter(mapped_ids))
+            return target_id
+
         # 선호도 설정
         for target_id, weight in (kg_cfg.get("preferences") or {}).items():
-            kg.set_preference(user_id, str(target_id), float(weight))
+            kg.set_preference(user_id, _normalize_target_id(str(target_id)), float(weight))
 
         # 섭취 이력 등록
         for record in (kg_cfg.get("user_history") or []):
-            mid = str(record.get("menu_id", ""))
+            mid = _normalize_target_id(str(record.get("menu_id", "")))
             ts_str = str(record.get("timestamp", ""))
             if mid and ts_str:
                 try:
