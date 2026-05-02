@@ -24,7 +24,7 @@ from datetime import datetime
 import numpy as np
 
 from .base_daily_problem import BaseDailyDietProblem
-from .kg_manager import KGManager
+from .kg_manager import KGManager, make_menu_id
 from .nutrition import NutritionProfile
 
 
@@ -92,11 +92,7 @@ class DailyExp3Problem(BaseDailyDietProblem):
         scores = [
             self.kg_manager.get_score(
                 self.user_id,
-                # item['id'] (UUID) 우선, 없으면 product_name|brand_name
-                str(item.get("id") or "") or (
-                    f"{item.get('product_name') or item.get('menu_name') or ''}|"
-                    f"{item.get('brand_name') or ''}"
-                ).rstrip("|"),
+                make_menu_id(item),  # kg_manager.make_menu_id()와 동일 규칙으로 ID 생성
                 self.lambda_decay,
                 now=self.sim_now,   # 시뮬레이션 시 가상 시각, None이면 datetime.now()
             )
