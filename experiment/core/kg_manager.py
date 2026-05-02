@@ -96,11 +96,13 @@ class KGManager:
         """ATE 엣지 추가/갱신 — 더 최근 타임스탬프로 갱신.
 
         PREFERS 엣지와 충돌 없음 (MultiDiGraph + 다른 key 사용).
-        timezone-aware datetime은 naive로 정규화 (get_score의 now=datetime.now()와 통일).
+        timezone-aware datetime은 로컬 시간대로 변환한 뒤 naive로 정규화
+        (get_score의 now=datetime.now()와 통일).
         """
-        # tz-aware → tz-naive 정규화 (now와 비교 시 TypeError 방지)
+        # tz-aware → 로컬 시간대로 변환 후 tz-naive 정규화
+        # (오프셋을 보존한 채 now와 비교 가능하게 만듦)
         if timestamp.tzinfo is not None:
-            timestamp = timestamp.replace(tzinfo=None)
+            timestamp = timestamp.astimezone().replace(tzinfo=None)
         self.G.add_node(user_id, type="user")
         self.G.add_node(menu_id, type="menu")
 
