@@ -174,7 +174,15 @@ def simulate(
     kg = KGManager()
     user_id = f"user_{persona_name}"
     for item in all_foods:
-        mid = str(item.get("product_name") or item.get("menu_name") or "")
+        item_id = item.get("id")
+        name = item.get("product_name") or item.get("menu_name") or ""
+        brand = item.get("brand_name") or ""
+        if item_id:
+            mid = str(item_id)
+        elif name and brand:
+            mid = f"{name}|{brand}"
+        else:
+            mid = str(name)
         cat = item.get("category", "UNKNOWN")
         if mid:
             kg.add_menu(mid, cat)
