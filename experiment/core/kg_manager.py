@@ -145,20 +145,24 @@ class KGManager:
 
         # decay ∈ [0, 1] 보장 (Δt 음수 방지로 이미 보장되지만 안전)
         decay = min(1.0, max(0.0, decay))
-        return preference * (1.0 - decay)
+        # 음수 weight 방어: preference가 음수여도 score는 0 이상 보장
+        score = preference * (1.0 - decay)
+        return max(0.0, score)
 
     def max_possible_score(self, user_id: str) -> float:
         """이론상 최대 추천 점수 = 최대 PREFERS 가중치 (감쇠 없음 기준).
 
+        기본 선호도 1.0을 포함하여 계산 — 모든 weight < 1.0이어도
+        기본값 메뉴의 score가 max_s를 초과해 f4가 음수가 되는 것을 방지.
         PREFERS 엣지가 없으면 기본값 1.0 반환.
         """
-        weights: list[float] = []
+        weights: list[float] = [1.0]  # 기본 선호도 항상 포함
         if not self.G.has_node(user_id):
             return 1.0
         for _, _, key, edata in self.G.out_edges(user_id, keys=True, data=True):
             if key == "PREFERS":
                 weights.append(float(edata.get("weight", 1.0)))
-        return max(weights) if weights else 1.0
+        return max(weights)
 
     # ------------------------------------------------------------------
     # 팩토리
@@ -232,6 +236,9 @@ class KGManager:
             if mid and ts_str:
                 try:
                     ts = datetime.fromisoformat(ts_str)
+                    # timezone-aware → naive 변환 (datetime.now()와 비교 위해)
+                    if ts.tzinfo is not None:
+                        ts = ts.replace(tzinfo=None)
                     kg.record_eating(user_id, mid, ts)
                 except ValueError:
                     pass

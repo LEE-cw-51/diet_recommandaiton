@@ -39,6 +39,8 @@ wsproto==1.2.0
 # ── 파이프라인 신규 추가 ─────────────────────────────────────
 # Supabase Python 클라이언트
 supabase>=2.0.0
+# 지식 그래프 (KGManager — Step 5 KG 기반 4목적 최적화)
+networkx>=3.0
 # Gemini API (Step 1: 원재료명 파싱) — google-generativeai deprecated, 신규 SDK 사용
 google-genai>=1.0.0
 # Groq API (Step 2: 식사 분류)
