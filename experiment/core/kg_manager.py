@@ -40,6 +40,27 @@ except ImportError as exc:
     ) from exc
 
 
+def make_menu_id(item: dict) -> str:
+    """food_master 아이템 dict에서 유니크 메뉴 ID를 생성한다.
+
+    우선순위:
+      1) item['id']   — Supabase UUID (가장 유니크)
+      2) "product_name|brand_name"  — DB 유니크 키 복합
+      3) product_name / menu_name   — fallback
+
+    모든 호출 지점(add_menu, get_score, record_eating)에서 이 함수를 사용하면
+    KG 노드 ID가 항상 동일하게 유지된다.
+    """
+    raw_id = item.get("id")
+    if raw_id not in (None, ""):
+        return str(raw_id)
+    name = str(item.get("product_name") or item.get("menu_name") or "")
+    brand = str(item.get("brand_name") or "")
+    if name and brand:
+        return f"{name}|{brand}"
+    return name
+
+
 class KGManager:
     """NetworkX MultiDiGraph 기반 지식 그래프."""
 
@@ -75,7 +96,11 @@ class KGManager:
         """ATE 엣지 추가/갱신 — 더 최근 타임스탬프로 갱신.
 
         PREFERS 엣지와 충돌 없음 (MultiDiGraph + 다른 key 사용).
+        timezone-aware datetime은 naive로 정규화 (get_score의 now=datetime.now()와 통일).
         """
+        # tz-aware → tz-naive 정규화 (now와 비교 시 TypeError 방지)
+        if timestamp.tzinfo is not None:
+            timestamp = timestamp.replace(tzinfo=None)
         self.G.add_node(user_id, type="user")
         self.G.add_node(menu_id, type="menu")
 
@@ -189,22 +214,11 @@ class KGManager:
         """
         kg = cls()
 
-        def _resolve_menu_id(item: dict) -> str:
-            raw_id = item.get("id")
-            if raw_id not in (None, ""):
-                return str(raw_id)
-
-            name = str(item.get("product_name") or item.get("menu_name") or "")
-            brand = str(item.get("brand_name") or "")
-            if name and brand:
-                return f"{name}|{brand}"
-            return name
-
         alias_to_menu_ids: dict[str, set[str]] = {}
 
-        # 전체 음식 메뉴 노드 등록
+        # 전체 음식 메뉴 노드 등록 — make_menu_id() 모듈 함수로 통일
         for item in all_foods:
-            mid = _resolve_menu_id(item)
+            mid = make_menu_id(item)
             cat = item.get("category", "UNKNOWN")
             if mid:
                 kg.add_menu(mid, cat)

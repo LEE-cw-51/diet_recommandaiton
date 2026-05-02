@@ -151,7 +151,7 @@ def simulate(
     seed_start: int = 42,
 ) -> list[dict]:
     from experiment.core.loader import FoodDataLoader
-    from experiment.core.kg_manager import KGManager
+    from experiment.core.kg_manager import KGManager, make_menu_id
     from experiment.core.nutrition import NutritionProfile
     from experiment.core.daily_exp3_problem import DailyExp3Problem
 
@@ -172,19 +172,11 @@ def simulate(
 
     print(f"  MAIN:{len(mains)} SIDE_SOUP:{len(sides_soup)} DRINK:{len(drinks)} SNACK:{len(snacks)}")
 
-    # ── KGManager 초기화 ─────────────────────────────────────────
+    # ── KGManager 초기화 — make_menu_id()로 ID 규칙 통일 ──────────
     kg = KGManager()
     user_id = f"user_{persona_name}"
     for item in all_foods:
-        item_id = item.get("id")
-        name = item.get("product_name") or item.get("menu_name") or ""
-        brand = item.get("brand_name") or ""
-        if item_id:
-            mid = str(item_id)
-        elif name and brand:
-            mid = f"{name}|{brand}"
-        else:
-            mid = str(name)
+        mid = make_menu_id(item)
         cat = item.get("category", "UNKNOWN")
         if mid:
             kg.add_menu(mid, cat)
@@ -262,9 +254,9 @@ def simulate(
             )
             print(f"     끼니{m_idx}: {meal_str}")
 
-        # ── 섭취 이력 업데이트 (오늘의 best 식단 전체를 '섭취'로 기록) ──
+        # ── 섭취 이력 업데이트 — make_menu_id()로 add_menu와 동일 ID 사용 ──
         for item in combo:
-            mid = str(item.get("product_name") or item.get("menu_name") or "")
+            mid = make_menu_id(item)
             if mid:
                 kg.record_eating(user_id, mid, today)
 
