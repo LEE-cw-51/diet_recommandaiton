@@ -88,17 +88,22 @@ class DailyExp3Problem(BaseDailyDietProblem):
 
         # f4: KG 오차율 = (max_score - avg_score) / max_score  ∈ [0, 1]
         max_s = self.kg_manager.max_possible_score(self.user_id)
+        max_s = max(1e-9, max_s)  # ZeroDivisionError 방어
         scores = [
             self.kg_manager.get_score(
                 self.user_id,
-                str(item.get("product_name") or item.get("menu_name") or ""),
+                # item['id'] (UUID) 우선, 없으면 product_name|brand_name
+                str(item.get("id") or "") or (
+                    f"{item.get('product_name') or item.get('menu_name') or ''}|"
+                    f"{item.get('brand_name') or ''}"
+                ).rstrip("|"),
                 self.lambda_decay,
                 now=self.sim_now,   # 시뮬레이션 시 가상 시각, None이면 datetime.now()
             )
             for item in combo
         ]
         avg_score = sum(scores) / len(scores) if scores else 0.0
-        f4 = (max_s - avg_score) / max_s
+        f4 = float(np.clip((max_s - avg_score) / max_s, 0.0, 1.0))
 
         out["F"] = [f1, f2, f3, f4]
         out["G"] = [self._allergen_g(combo)]

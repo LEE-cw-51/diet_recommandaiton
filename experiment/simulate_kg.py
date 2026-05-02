@@ -98,8 +98,10 @@ def _run_one_day(
     if len(F) == 0:
         return None, None
 
-    # f1(칼로리 오차) 최소 해 선택
-    best_idx = int(np.argmin(F[:, 0]))
+    # 참조점 [0,0,0,0] 기준 L2 거리 최소 해 선택 (4목적 균형)
+    ref = np.zeros(F.shape[1])
+    dist = np.linalg.norm(F - ref, axis=1)
+    best_idx = int(np.argmin(dist))
     return F[best_idx], X[best_idx].astype(int)
 
 
