@@ -31,7 +31,13 @@ from __future__ import annotations
 import math
 from datetime import datetime
 
-import networkx as nx
+try:
+    import networkx as nx
+except ImportError as exc:
+    raise ImportError(
+        "KGManager requires the optional dependency 'networkx'. "
+        "Install it with `pip install networkx` and try again."
+    ) from exc
 
 
 class KGManager:
