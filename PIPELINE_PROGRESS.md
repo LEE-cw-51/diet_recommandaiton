@@ -1,7 +1,7 @@
 # 파이프라인 진행 상황
 
 ## 현재 상태
-- **완료**: Step 3-4 — KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II) + 7일 시뮬레이션 검증 ✅
+- **완료**: Step 5 — KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II) + 7일 시뮬레이션 검증 ✅
 - **다음 작업**: 30회 본실험 실행 (`daily_exp3_rnsga2.yaml`) + 결과 분석
 - 마지막 업데이트: 2026-05-03 (Session 9 종료, KG·R-NSGA-II 구현 + 시뮬레이션 완료)
 
