@@ -155,6 +155,8 @@ class FoodDataLoader:
 
             cat = item.get("category_type", "SIDE")
             bucket = _CATEGORY_BUCKET.get(cat, "SIDE_SOUP")
+            # 실험용 카테고리 이름을 아이템에도 기록 (KG 구성 시 사용)
+            item["category"] = bucket
             buckets[bucket].append(item)
 
         return buckets

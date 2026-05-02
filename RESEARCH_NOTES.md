@@ -101,6 +101,106 @@
 - `--resume` 전체: 850/871 성공 (97.6%), 21개 실패 (`--resume` 재시도 가능)
 - 브랜드: BurgerKing, CU, GS25, McDonalds, Lotteria, 이마트24, Subway, Salady 등
 
+### Session 8 (2026-03-18) — Step 3-4: 다목적 최적화 실험 프레임워크 구축
+
+**구현 내용**
+- `experiment/` 디렉토리 전체 신설 (core, algorithms, config, results)
+- 한끼 실험: Exp1 (2목적), Exp2 (3목적), NSGA-II
+- 하루 실험: DailyExp1, DailyExp2, NSGA-II
+- `FoodDataLoader.from_supabase()` — PostgREST pagination (1,000행 limit 대응)
+- 30회 반복 실행 + GD/IGD/HV/Spread 지표 계산 (`core/metrics.py`)
+- 테스트 완료: daily_exp1 (GD=0.24, HV=2.38), daily_exp2 (GD=0.11, HV=0.77)
+
+---
+
+### Session 9 (2026-05-03) — Step 5: KG 기반 4목적 최적화 + R-NSGA-II
+
+#### 핵심 기여 (논문 메인 컨트리뷰션)
+
+기존 3목적(칼로리·매크로·가격) 프레임워크에 **지식 그래프 기반 개인화 목적함수 f4**를 추가했다.
+DB 스키마 변경 없이 NetworkX MultiDiGraph 엣지 구조만으로 선호도와 시간 감쇠를 표현한다는 것이 핵심.
+
+#### 지식 그래프(KG) 설계
+
+```
+KG 노드
+  user     : 사용자 식별자
+  menu     : 메뉴 (product_name 기준)
+  category : MAIN / SIDE_SOUP / DRINK / SNACK
+
+KG 엣지 (MultiDiGraph)
+  IS_IN   (Menu → Category)         : 정적 분류, 속성 없음
+  PREFERS (User → Category/Menu)    : weight 선호 가중치
+  ATE     (User → Menu)             : timestamp 마지막 섭취 시각
+```
+
+MultiDiGraph를 선택한 이유: 동일 (user→menu) 쌍에 PREFERS와 ATE 엣지가 동시 존재 가능해야 함.
+DiGraph 사용 시 record_eating()이 set_preference() 엣지를 덮어씀 (버그 3).
+
+#### 추천 점수 공식
+
+$$Score_{KG}(i) = P_i \times (1 - D_i)$$
+
+$$D_i = \max_{j \in \text{History}} \left( Sim(i,j) \times e^{-\lambda \Delta t_j} \right)$$
+
+- $P_i$: PREFERS 직접 > 카테고리 PREFERS 전파 > 기본값 1.0
+- $Sim$: 직접 ATE = 1.0, 동일 카테고리 형제 메뉴 ATE = 0.5
+- $\lambda = 0.5$ → 반감기 약 1.4일
+
+#### f4 오차율
+
+$$f_4 = \frac{\text{max\_score} - \text{avg\_score}}{\text{max\_score}} \in [0, 1]$$
+
+f1~f3과 동일한 '오차율' 스케일로 정규화하여 R-NSGA-II 참조점 설계를 단순화.
+0이면 모든 메뉴가 최고 선호도이면서 최근 미섭취 상태.
+
+#### R-NSGA-II 도입 근거
+
+4차원 파레토 프론트는 해의 분포가 지나치게 넓어 사용자가 선택하기 어렵다.
+R-NSGA-II는 참조점 기반으로 원하는 영역에 해를 집중시킨다.
+
+참조점 설계:
+| 참조점 | f1 | f2 | f3 | f4 | 의미 |
+|-------|----|----|----|----|------|
+| [0,0,0,0] | 0.0 | 0.0 | 0.0 | 0.0 | 균형 해 |
+| [0.1,0.1,0.1,0] | 0.1 | 0.1 | 0.1 | 0.0 | 개인화 우선 해 |
+
+#### 구현 중 발견된 버그 4건
+
+| # | 버그 | 원인 | 수정 |
+|---|------|------|------|
+| 1 | 음수 KG 점수 | 가상 ATE 타임스탬프 > sim_now → Δt 음수 → e^{+λΔt} > 1 | `delta_days = max(0.0, ...)` + `sim_now` 파라미터 전달 |
+| 2 | O(957) 형제 탐색 | `G.predecessors(cat)` 전체 순회 | `_ate_by_category` 인덱스로 O(ATE수) |
+| 3 | PREFERS 덮어쓰기 | DiGraph 단일 엣지 제한 | MultiDiGraph + key="PREFERS"/"ATE" |
+| 4 | category=UNKNOWN | `loader.py`에서 bucket 매핑 미기록 | `item["category"] = bucket` 추가 |
+
+#### 7일 시뮬레이션 검증 결과
+
+페르소나 설정:
+- 한식_매니아: MAIN 1.5, SIDE_SOUP 1.2, DRINK 0.5 (음료 비선호)
+- 가성비_추구: MAIN 1.0, DRINK 1.3, SNACK 1.4
+
+결과:
+| 페르소나 | Hit Rate | 중복률 | 평균 f1 | f4 추이 |
+|---------|---------|-------|--------|--------|
+| 한식_매니아 | 100% | 2.6% | 0.000 | Day1: 0.25 → Day7: 0.46 |
+| 가성비_추구 | 100% | 1.2% | 0.000 | Day1: 0.26 → Day7: 0.48 |
+
+f4가 Day1 → Day7로 증가하는 것은 누적 섭취 이력에 의한 감쇠가 쌓이는 것으로 정상 동작.
+칼로리 오차(f1)가 7일 내내 0.000인 것은 알고리즘이 영양 제약을 완전히 충족함을 의미.
+
+#### 설계 결정 요약
+
+| 결정 | 이유 |
+|------|------|
+| DailyExp2 수정 대신 DailyExp3 신설 | 기존 3목적 실험 결과 보존 |
+| BaseDailyDietProblem 직접 상속 | DailyExp2의 n_obj=3 하드코딩 우회 |
+| menu_id = product_name | 컬럼 추가 없이 기존 식별자 재사용 |
+| from_config() 팩토리 메서드 | YAML 설정만으로 KG 구성 가능 |
+| normalization="front" | f1~f4 단위 자동 정규화 (R-NSGA-II 내장) |
+
+---
+
 ### Session 7 (2026-03-10) — Step 1c / Step 2 / Step 2b / Step 2c 설계
 
 #### Step 1c: 프랜차이즈 가격 조회
@@ -165,6 +265,10 @@
 | S7 | Groq TPM 6,000/min 초과 → 분류 923개에서 중단 | Gemini 2.5 Flash-Lite로 전환, 나머지 2,449개 완료 |
 | S7 | Gemini 503 ServiceUnavailable (~0.5% 빈도) | except 503 → MAIN fallback, 알고리즘 영향 없음 |
 | S7 | price 이상치 (최솟값 9원 ~ 최댓값 1,440,000원) | IQR 1.5× Tukey's fence per category, Naver 재검색 → NULL |
+| S9 | KG 점수 음수 발생 (simulate_kg Day2~) | 가상 ATE 타임스탬프 > sim_now → Δt < 0 → `max(0.0, Δt)` + sim_now 파라미터 전달 |
+| S9 | 형제 탐색 O(카테고리 전체) 성능 문제 | `_ate_by_category` dict 인덱스 추가 → O(ATE수) |
+| S9 | PREFERS 엣지가 ATE 기록 시 덮어써짐 | DiGraph → MultiDiGraph, key="PREFERS"/"ATE" 구분 |
+| S9 | KGManager 모든 메뉴 category=UNKNOWN | `loader.get_category_lists()`에서 `item["category"]=bucket` 미기록 → 추가 |
 
 ---
 
@@ -254,7 +358,10 @@ main():
 - [x] Step 1c: 프랜차이즈 가격 조회 (564/846 업데이트)
 - [x] Step 2: category_type 전체 분류 (3,372/3,372, Gemini 2.5 Flash-Lite)
 - [x] Step 2b: 영양성분 불량 행 14개 삭제 → 최종 3,358행
-- [ ] Step 2c: price 이상치 처리 — Phase 1 SQL + Phase 2 Naver 재검색 + Phase 3 브라우저
-- [ ] Step 3: `DailyDietOptimizer.from_supabase()` 구현, 알레르기 22종 확장
+- [x] Step 2c: price 이상치 처리 — Phase 1 SQL NULL 처리 (142개)
+- [x] Step 3-4: 다목적 최적화 실험 프레임워크 (NSGA-II, Exp1~2)
+- [x] **Step 5: KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II) + 7일 시뮬레이션 검증**
+- [ ] 30회 본실험 실행 (`daily_exp3_rnsga2.yaml`) + GD/IGD/HV 통계 분석
+- [ ] DailyExp1/2 vs DailyExp3 비교 분석 (KG 개인화 효과 정량화)
 - [ ] LLM 분류 검증: 랜덤 샘플 확인 + 사용자 피드백 루프 구축
 - [ ] HACCP API 안정화 — V3 엔드포인트 재시도 또는 대체 소스 탐색

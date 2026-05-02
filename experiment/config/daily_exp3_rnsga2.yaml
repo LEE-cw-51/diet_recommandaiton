@@ -1,0 +1,46 @@
+experiment_id: daily_exp3_rnsga2_base
+
+problem:
+  class: DailyExp3Problem
+  n_obj: 4
+  n_meals: 3
+  include_snack: false
+  nutrition_profile:
+    label: base_50_20_30
+    r_C: 0.500   # 탄수화물 목표 비율
+    r_P: 0.200   # 단백질 목표 비율
+    r_F: 0.300   # 지방 목표 비율
+    w_C: 0.333
+    w_P: 0.333
+    w_F: 0.334
+  kg:
+    user_id: user_0
+    lambda_decay: 0.5          # λ: 감쇠 상수 (0.5 → 약 1.4일 반감기)
+    preferences:
+      MAIN:  1.2               # 메인 카테고리 선호 가중치
+      DRINK: 0.8               # 음료 카테고리 비선호
+    user_history: []           # 섭취 이력 예시:
+                               # - menu_id: "비빔밥"
+                               #   timestamp: "2026-04-25T12:00:00"
+
+algorithm:
+  name: RNSGA2
+  pop_size: 200
+  n_gen: 200
+  # 참조점: [f1_target, f2_target, f3_target, f4_target]
+  # f1~f4 모두 오차율 [0,1] 스케일 → 목표값 0.0
+  ref_points:
+    - [0.0, 0.0, 0.0, 0.0]    # 이상점: 모든 오차 0 (균형 탐색)
+    - [0.1, 0.1, 0.1, 0.0]    # 개인화 우선: 영양·가격 10% 허용, KG 오차 0 고수
+  epsilon: 0.001               # 참조점 근처 해 보존 허용 오차
+  normalization: front         # 현재 세대 기준 정규화 (f1~f4 단위 통일)
+  crossover:
+    n_points: 2
+    prob: 0.9
+  mutation:
+    prob: 0.083                # 권장: 1/n_var = 1/12 ≈ 0.083 (n_meals=3 기준)
+    eta: 20
+
+runner:
+  n_runs: 30
+  seed_start: 42
