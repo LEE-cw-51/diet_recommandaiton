@@ -1,8 +1,9 @@
 # 파이프라인 진행 상황
 
 ## 현재 상태
-- **다음 작업**: Step 3 — `DailyDietOptimizer.from_supabase()` 구현 (Supabase → 알고리즘 연동)
-- 마지막 업데이트: 2026-03-10 (Session 7 종료, Step 2c SQL 완료)
+- **완료**: Step 5 — KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II) + 7일 시뮬레이션 검증 ✅
+- **다음 작업**: 30회 본실험 실행 (`daily_exp3_rnsga2.yaml`) + 결과 분석
+- 마지막 업데이트: 2026-05-03 (Session 9 종료, KG·R-NSGA-II 구현 + 시뮬레이션 완료)
 
 ## 단계별 완료 현황
 | 단계 | 내용 | 상태 | 수치 |
@@ -15,7 +16,56 @@
 | Step 2 | Gemini 2.5 Flash-Lite → category_type 분류 (5-class) | ✅ | 3,372/3,372 (100%), 503 fallback ~0.5% |
 | Step 2b | 영양성분 불량 행 데이터 클렌징 | ✅ | 14개 삭제, 최종 3,358행 (SNACK 1,101 / MAIN 957 / SIDE 688 / DRINK 441 / SOUP 171) |
 | Step 2c | price 이상치 처리 (IQR Tukey's fence → SQL NULL) | ✅ | LOW 16개 + HIGH 126개 → NULL (SQL 일괄 처리) |
-| Step 3 | 알고리즘 연동 (from_supabase + 22종 알레르기) | ⏳ | — |
+| Step 3-4 | 다목적 최적화 실험 프레임워크 (NSGA-II, Exp1~2) | ✅ | GD/IGD/HV/Spread 지표 완비 |
+| **Step 5** | **KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II)** | ✅ | **7일 시뮬레이션 Hit Rate 100%** |
+
+## Session 9 완료 내용 (2026-05-03)
+
+### Step 5: KG 기반 4목적 최적화 + R-NSGA-II
+
+**신규 파일**
+| 파일 | 역할 |
+|------|------|
+| `experiment/core/kg_manager.py` | NetworkX MultiDiGraph KG (IS_IN / PREFERS / ATE 엣지) |
+| `experiment/core/daily_exp3_problem.py` | 4목적 문제 (f1 칼로리·f2 매크로·f3 가격·f4 KG오차율) |
+| `experiment/config/daily_exp3_rnsga2.yaml` | R-NSGA-II 실험 설정 (pop=200, gen=200, n_runs=30) |
+| `experiment/simulate_kg.py` | 2페르소나 × 7일 시뮬레이션 검증 스크립트 |
+| `experiment/results/simulation/` | 시뮬레이션 결과 CSV |
+
+**수정 파일**
+| 파일 | 변경 |
+|------|------|
+| `experiment/algorithms/factory.py` | RNSGA2 빌더 등록 |
+| `experiment/core/runner.py` | DailyExp3Problem 레지스트리 + KG 파라미터 처리 |
+| `experiment/core/loader.py` | `item["category"] = bucket` 추가 (KG 카테고리 매핑 버그 수정) |
+
+**KG 설계 요약**
+- 노드: user / menu / category
+- 엣지: `IS_IN` (Menu→Category), `PREFERS` (User→Category/Menu, weight), `ATE` (User→Menu, timestamp)
+- 점수 공식: `Score_KG(i) = P_i × (1 - D_i)`, `D_i = max_j(Sim·e^{-λΔt})`
+- f4 오차율: `(max_score - avg_score) / max_score ∈ [0,1]`
+
+**7일 시뮬레이션 결과**
+| 페르소나 | Hit Rate | 중복률 | 평균 f1 |
+|---------|---------|-------|--------|
+| 한식_매니아 | 100% ✅ | 2.6% ✅ | 0.000 ✅ |
+| 가성비_추구 | 100% ✅ | 1.2% ✅ | 0.000 ✅ |
+
+**수정된 버그 4건**
+1. sim_now 미전달 → 미래 ATE 타임스탬프로 음수 감쇠 발생
+2. 카테고리 형제 탐색 O(N) → `_ate_by_category` 인덱스로 O(ATE수)로 최적화
+3. DiGraph → MultiDiGraph (PREFERS·ATE 동일 엣지 충돌 방지)
+4. `item["category"]` 미기록 → `loader.get_category_lists()`에서 bucket 기록 추가
+
+**다음 작업**
+```bash
+# 30회 본실험
+python -X utf8 experiment/run_experiment.py \
+    --config experiment/config/daily_exp3_rnsga2.yaml \
+    --cal_star 2000 --price_star 8000
+```
+
+---
 
 ## Step 2c 설계
 - 스크립트: `pipeline/05_augment/step2c_price_outlier_fix.py`
