@@ -63,8 +63,10 @@ class DailyExp3Problem(BaseDailyDietProblem):
         self.kg_manager = kg_manager if kg_manager is not None else KGManager()
         self.user_id = user_id
         self.lambda_decay = lambda_decay
-        # 시뮬레이션용 가상 현재 시각. None이면 datetime.now() 사용 (실서비스 모드).
-        self.sim_now = sim_now
+        # 시뮬레이션용 기준 현재 시각.
+        # sim_now가 주어지지 않으면 생성 시점의 현재 시각을 한 번만 캡처해
+        # 모든 평가에서 동일하게 사용하여 목적함수 재현성을 보장한다.
+        self.sim_now = sim_now if sim_now is not None else datetime.now()
 
     def _evaluate(self, x, out, *args, **kwargs):
         combo = self.decode(x)
