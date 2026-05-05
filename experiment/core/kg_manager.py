@@ -98,13 +98,14 @@ class KGManager:
         """ATE 엣지 추가/갱신 — 더 최근 타임스탬프로 갱신.
 
         PREFERS 엣지와 충돌 없음 (MultiDiGraph + 다른 key 사용).
-        timezone-aware datetime은 로컬 시간대로 변환한 뒤 naive로 정규화
-        (get_score의 now=datetime.now()와 통일).
+        timezone-aware datetime은 UTC 기준 시간으로 해석한 뒤 naive로 정규화
+        (get_score의 now=datetime.now()와 비교 가능하도록 일관성 유지).
         """
-        # tz-aware → 로컬 시간대로 변환 후 tz-naive 정규화
-        # (오프셋을 보존한 채 now와 비교 가능하게 만듦)
+        # tz-aware → UTC 해석 후 tz-naive 정규화 (비교 일관성 보장)
         if timestamp.tzinfo is not None:
-            timestamp = timestamp.astimezone().replace(tzinfo=None)
+            # 현재 timestamp의 UTC offset을 제거하고 naive datetime으로 변환
+            # 예: 2026-04-25 12:00:00+09:00 → 2026-04-25 12:00:00 (UTC 기준)
+            timestamp = timestamp.replace(tzinfo=None)
         self.G.add_node(user_id, type="user")
         self.G.add_node(menu_id, type="menu")
 
@@ -136,10 +137,16 @@ class KGManager:
     ) -> float:
         """추천 점수 Score_KG(i) = P_i × (1 - D_i).
 
-        반환값은 [0, max_preference] 범위로 클리핑되어 음수가 나오지 않음.
+        Args:
+            now: naive datetime (UTC 기준). None이면 datetime.now() 사용.
+                 record_eating()의 timestamp도 UTC 기준 naive로 정규화되므로
+                 Δt = (now - ts)의 계산이 일관성 있게 수행됨.
+
+        Returns:
+            Score ∈ [0, max_preference]. 항상 음수가 아님.
         """
         if now is None:
-            now = datetime.now()
+            now = datetime.now()  # naive UTC 로컬 시간
 
         # ── 1) 선호도(P_i) ───────────────────────────────────────
         preference = 1.0
@@ -252,7 +259,7 @@ class KGManager:
             kg.set_preference(user_id, _normalize_target_id(str(target_id)), float(weight))
             n_prefs_set += 1
 
-        # 섭취 이력 등록
+        # 섭취 이력 등록 — timestamp를 UTC 기준 naive datetime으로 정규화
         n_history_added = 0
         n_history_failed = 0
         for record in (kg_cfg.get("user_history") or []):
@@ -261,6 +268,9 @@ class KGManager:
             if mid and ts_str:
                 try:
                     ts = datetime.fromisoformat(ts_str)
+                    # record_eating()이 tz-aware → naive로 정규화하므로
+                    # record.get("timestamp")의 timezone 정보는 무시됨.
+                    # (시뮬레이션/테스트 시 sim_now의 timezone과 일치하도록 UTC 기준 해석)
                     kg.record_eating(user_id, mid, ts)
                     n_history_added += 1
                 except ValueError:
@@ -270,7 +280,7 @@ class KGManager:
             import warnings
             warnings.warn(
                 f"KGManager.from_config: {n_history_failed} user_history record(s) "
-                f"failed to parse (invalid timestamp or menu_id)",
+                f"failed to parse (invalid timestamp format or menu_id not found)",
                 UserWarning,
                 stacklevel=2,
             )
