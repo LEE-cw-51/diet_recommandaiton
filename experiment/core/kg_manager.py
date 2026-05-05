@@ -138,15 +138,15 @@ class KGManager:
         """추천 점수 Score_KG(i) = P_i × (1 - D_i).
 
         Args:
-            now: naive datetime (UTC 기준). None이면 datetime.now() 사용.
-                 record_eating()의 timestamp도 UTC 기준 naive로 정규화되므로
-                 Δt = (now - ts)의 계산이 일관성 있게 수행됨.
+            now: naive datetime. None이면 datetime.now() 사용.
+                 저장된 timestamp와 동일한 기준(예: 동일 시스템의 로컬 naive 시간)으로
+                 해석 가능한 값을 넘겨야 Δt = (now - ts) 계산이 일관됩니다.
 
         Returns:
             Score ∈ [0, max_preference]. 항상 음수가 아님.
         """
         if now is None:
-            now = datetime.now()  # naive UTC 로컬 시간
+            now = datetime.now()  # datetime.now()가 반환하는 로컬 기준 naive 시간 사용
 
         # ── 1) 선호도(P_i) ───────────────────────────────────────
         preference = 1.0
