@@ -2,7 +2,6 @@ experiment_id: daily_exp3_rnsga2_base
 
 problem:
   class: DailyExp3Problem
-  n_obj: 4
   n_meals: 3
   include_snack: false
   nutrition_profile:
