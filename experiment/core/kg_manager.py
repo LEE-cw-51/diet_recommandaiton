@@ -97,14 +97,22 @@ class KGManager:
     def record_eating(self, user_id: str, menu_id: str, timestamp: datetime) -> None:
         """ATE 엣지 추가/갱신 — 더 최근 타임스탬프로 갱신.
 
-        PREFERS 엣지와 충돌 없음 (MultiDiGraph + 다른 key 사용).
-        timezone-aware datetime은 UTC 기준 시간으로 해석한 뒤 naive로 정규화
-        (get_score의 now=datetime.now()와 비교 가능하도록 일관성 유지).
+        Args:
+            timestamp: 메뉴 섭취 시각. tz-aware 또는 naive 모두 가능.
+                       tz-aware인 경우 UTC offset을 제거하고 naive로 정규화.
+                       (get_score()의 now와 Δt 계산 일관성 보장)
+
+        Note:
+            PREFERS 엣지와 충돌 없음 (MultiDiGraph + key 분리).
+            timezone 정규화:
+              tz-aware "2026-04-25 12:00:00+09:00"
+                → remove tzinfo → naive "2026-04-25 12:00:00"
+                → get_score(now=datetime.now())과 일관된 Δt 계산
         """
-        # tz-aware → UTC 해석 후 tz-naive 정규화 (비교 일관성 보장)
+        # tz-aware → naive 정규화 (tzinfo 제거, UTC offset은 무시)
+        # 이 방식은 offset 보존이 필요 없고, get_score()의 datetime.now()와
+        # 비교 가능한 naive datetime만 필요한 경우에 적합함.
         if timestamp.tzinfo is not None:
-            # 현재 timestamp의 UTC offset을 제거하고 naive datetime으로 변환
-            # 예: 2026-04-25 12:00:00+09:00 → 2026-04-25 12:00:00 (UTC 기준)
             timestamp = timestamp.replace(tzinfo=None)
         self.G.add_node(user_id, type="user")
         self.G.add_node(menu_id, type="menu")
@@ -138,15 +146,22 @@ class KGManager:
         """추천 점수 Score_KG(i) = P_i × (1 - D_i).
 
         Args:
-            now: naive datetime (UTC 기준). None이면 datetime.now() 사용.
-                 record_eating()의 timestamp도 UTC 기준 naive로 정규화되므로
+            now: 시뮬레이션 기준 시각 (반드시 naive datetime, tzinfo=None).
+                 None이면 datetime.now() 사용 (로컬 시간, naive).
+                 record_eating()의 timestamp도 naive로 정규화되므로
                  Δt = (now - ts)의 계산이 일관성 있게 수행됨.
+                 tz-aware datetime을 넘기면 TypeError 발생.
 
         Returns:
             Score ∈ [0, max_preference]. 항상 음수가 아님.
         """
         if now is None:
-            now = datetime.now()  # naive UTC 로컬 시간
+            now = datetime.now()  # naive datetime (로컬 시간)
+        elif now.tzinfo is not None:
+            raise TypeError(
+                f"get_score(now=...) expects naive datetime, but got tzinfo={now.tzinfo}. "
+                "Use datetime.now() or datetime.fromisoformat(ts_str) without timezone."
+            )
 
         # ── 1) 선호도(P_i) ───────────────────────────────────────
         preference = 1.0
