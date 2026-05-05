@@ -10,3 +10,6 @@ data/processed/*.csv
 .checkpoint/
 data/raw/search_cache/
 .claude/
+
+# 실험 결과 출력 (대용량 CSV, 재생성 가능)
+experiment/results/output/
