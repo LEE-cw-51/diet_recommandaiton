@@ -31,6 +31,7 @@ PROBLEM_REGISTRY = {
     "Exp2Problem":      "experiment.core.exp2_problem.Exp2Problem",
     "DailyExp1Problem": "experiment.core.daily_exp1_problem.DailyExp1Problem",
     "DailyExp2Problem": "experiment.core.daily_exp2_problem.DailyExp2Problem",
+    "DailyExp3Problem": "experiment.core.daily_exp3_problem.DailyExp3Problem",
 }
 
 
@@ -192,7 +193,7 @@ def run_experiment(
     if is_daily:
         n_meals = cfg["problem"].get("n_meals", 3)
         include_snack = cfg["problem"].get("include_snack", False)
-        problem = ProblemCls(
+        kwargs = dict(
             mains=mains,
             sides_soup=sides_soup,
             drinks=drinks,
@@ -203,6 +204,18 @@ def run_experiment(
             price_per_meal_star=price_star,
             profile=profile,
         )
+        if problem_class_name == "DailyExp3Problem":
+            from experiment.core.kg_manager import KGManager
+            kg_cfg = cfg["problem"].get("kg", {})
+            uid = kg_cfg.get("user_id", "user_0")
+            lam = float(kg_cfg.get("lambda_decay", 0.5))
+            all_foods = mains + sides_soup + drinks + snacks
+            kg_manager = KGManager.from_config(all_foods, kg_cfg, user_id=uid)
+            kwargs.update(kg_manager=kg_manager, user_id=uid, lambda_decay=lam)
+            print(f"  KG 구성 완료: 노드={kg_manager.G.number_of_nodes()}, "
+                  f"엣지={kg_manager.G.number_of_edges()}, "
+                  f"max_score={kg_manager.max_possible_score(uid):.3f}")
+        problem = ProblemCls(**kwargs)
     else:
         problem = ProblemCls(
             mains=mains,

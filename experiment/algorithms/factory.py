@@ -5,7 +5,7 @@
   2. YAML config의 algorithm.name을 "MOEAD"로 변경
   3. Problem, metrics, runner 변경 없음
 
-현재 등록된 알고리즘: NSGA2
+현재 등록된 알고리즘: NSGA2, RNSGA2
 """
 
 from __future__ import annotations
@@ -61,6 +61,47 @@ def _build_nsga2(cfg: dict):
         ),
         mutation=PM(
             prob=mutation_cfg.get("prob", 0.1),
+            eta=mutation_cfg.get("eta", 20),
+        ),
+        eliminate_duplicates=cfg.get("eliminate_duplicates", True),
+    )
+
+
+# ------------------------------------------------------------------
+# R-NSGA-II (Reference Point Based NSGA-II)
+# ------------------------------------------------------------------
+
+@register("RNSGA2")
+def _build_rnsga2(cfg: dict):
+    from pymoo.algorithms.moo.rnsga2 import RNSGA2
+    from pymoo.operators.crossover.pntx import PointCrossover
+    from pymoo.operators.mutation.pm import PM
+    from pymoo.operators.sampling.rnd import IntegerRandomSampling
+    import numpy as np
+
+    crossover_cfg = cfg.get("crossover", {})
+    mutation_cfg  = cfg.get("mutation", {})
+
+    # ref_points: YAML list[list[float]] → ndarray (n_ref, n_obj)
+    ref_points_raw = cfg.get("ref_points", [[0.0, 0.0, 0.0, 0.0]])
+    ref_points = np.array(ref_points_raw, dtype=float)
+
+    return RNSGA2(
+        ref_points=ref_points,
+        pop_size=cfg["pop_size"],
+        epsilon=float(cfg.get("epsilon", 0.001)),
+        normalization=cfg.get("normalization", "front"),
+        weights=cfg.get("weights", None),   # None → pymoo 내부에서 균등 가중치 적용
+        extreme_points_as_reference_points=cfg.get(
+            "extreme_points_as_reference_points", False
+        ),
+        sampling=IntegerRandomSampling(),
+        crossover=PointCrossover(
+            n_points=crossover_cfg.get("n_points", 2),
+            prob=crossover_cfg.get("prob", 0.9),
+        ),
+        mutation=PM(
+            prob=mutation_cfg.get("prob", 0.083),
             eta=mutation_cfg.get("eta", 20),
         ),
         eliminate_duplicates=cfg.get("eliminate_duplicates", True),
