@@ -52,8 +52,10 @@ def make_menu_id(item: dict) -> str:
     KG 노드 ID가 항상 동일하게 유지된다.
     """
     raw_id = item.get("id")
-    if raw_id not in (None, ""):
-        return str(raw_id)
+    if raw_id:
+        raw_id_str = str(raw_id).strip()
+        if raw_id_str:  # 빈 string / whitespace 제외
+            return raw_id_str
     name = str(item.get("product_name") or item.get("menu_name") or "")
     brand = str(item.get("brand_name") or "")
     if name and brand:
@@ -229,22 +231,30 @@ class KGManager:
                     item.get("product_name"),
                     item.get("menu_name"),
                 ):
-                    alias_str = str(alias or "")
+                    alias_str = str(alias or "").strip()
                     if alias_str:
                         alias_to_menu_ids.setdefault(alias_str, set()).add(mid)
 
         def _normalize_target_id(raw_target_id: str) -> str:
-            target_id = str(raw_target_id)
+            target_id = str(raw_target_id).strip()
             mapped_ids = alias_to_menu_ids.get(target_id)
             if mapped_ids and len(mapped_ids) == 1:
                 return next(iter(mapped_ids))
+            # 매핑 실패 시 원본 ID 반환 (명시적 주석)
+            if mapped_ids and len(mapped_ids) > 1:
+                # 하나의 alias가 여러 메뉴에 매핑됨 (보통 발생하지 않음)
+                pass
             return target_id
 
         # 선호도 설정
+        n_prefs_set = 0
         for target_id, weight in (kg_cfg.get("preferences") or {}).items():
             kg.set_preference(user_id, _normalize_target_id(str(target_id)), float(weight))
+            n_prefs_set += 1
 
         # 섭취 이력 등록
+        n_history_added = 0
+        n_history_failed = 0
         for record in (kg_cfg.get("user_history") or []):
             mid = _normalize_target_id(str(record.get("menu_id", "")))
             ts_str = str(record.get("timestamp", ""))
@@ -252,7 +262,17 @@ class KGManager:
                 try:
                     ts = datetime.fromisoformat(ts_str)
                     kg.record_eating(user_id, mid, ts)
+                    n_history_added += 1
                 except ValueError:
-                    pass
+                    n_history_failed += 1
+
+        if n_history_failed > 0:
+            import warnings
+            warnings.warn(
+                f"KGManager.from_config: {n_history_failed} user_history record(s) "
+                f"failed to parse (invalid timestamp or menu_id)",
+                UserWarning,
+                stacklevel=2,
+            )
 
         return kg
