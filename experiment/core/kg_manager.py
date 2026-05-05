@@ -251,9 +251,6 @@ class KGManager:
             if mid and ts_str:
                 try:
                     ts = datetime.fromisoformat(ts_str)
-                    # timezone-aware → naive 변환 (datetime.now()와 비교 위해)
-                    if ts.tzinfo is not None:
-                        ts = ts.replace(tzinfo=None)
                     kg.record_eating(user_id, mid, ts)
                 except ValueError:
                     pass
