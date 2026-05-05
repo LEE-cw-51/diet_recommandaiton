@@ -140,6 +140,8 @@ class KGManager:
         """
         if now is None:
             now = datetime.now()
+        elif now.tzinfo is not None and now.utcoffset() is not None:
+            now = now.astimezone().replace(tzinfo=None)
 
         # ── 1) 선호도(P_i) ───────────────────────────────────────
         preference = 1.0
