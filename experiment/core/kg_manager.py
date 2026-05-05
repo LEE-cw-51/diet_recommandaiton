@@ -206,7 +206,6 @@ class KGManager:
 
         kg_cfg 예시:
           user_id: user_0
-          lambda_decay: 0.5
           preferences:
             MAIN: 1.2
             DRINK: 0.8
