@@ -63,7 +63,9 @@ class DailyExp3Problem(BaseDailyDietProblem):
         self.kg_manager = kg_manager if kg_manager is not None else KGManager()
         self.user_id = user_id
         self.lambda_decay = lambda_decay
-        # 시뮬레이션용 가상 현재 시각. None이면 datetime.now() 사용 (실서비스 모드).
+        # 시뮬레이션용 가상 현재 시각 (반드시 naive datetime 또는 None).
+        # None이면 get_score() 내부에서 datetime.now() 사용 (실서비스 모드).
+        # tz-aware datetime을 전달하면 get_score()에서 TypeError 발생.
         self.sim_now = sim_now
 
     def _evaluate(self, x, out, *args, **kwargs):
