@@ -98,7 +98,7 @@ print(f"  ✓ 저장: {FIGURES_DIR / 'box_plot_comparison.png'}")
 print("\n📈 생성 중: pareto_scatter_exp3.png")
 
 # Exp3의 ref_pareto_front.csv 로드
-ref_pf_file = WORKTREE_EXP3 / "daily_exp3_rnsga2_base_20260506_193432" / "ref_pareto_front.csv"
+ref_pf_file = WORKTREE_EXP3 / Path(RESULTS_PATHS["exp3"]).name / "ref_pareto_front.csv"
 if ref_pf_file.exists():
     ref_pf = pd.read_csv(ref_pf_file)
 
