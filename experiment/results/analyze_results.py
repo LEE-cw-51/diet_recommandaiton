@@ -211,14 +211,13 @@ def main():
     # 2. Pareto Scatter: 2D 투영 (Exp3)
     # ============================================================================
 
-    print("\n📈 생성 중: pareto_scatter_exp3.png")
-
     # Exp3의 ref_pareto_front.csv 로드
     ref_pf_file = None
     if "exp3" in results_paths:
         ref_pf_file = results_paths["exp3"] / "ref_pareto_front.csv"
 
     if ref_pf_file and ref_pf_file.exists():
+        print("\n📈 생성 중: pareto_scatter_exp3.png")
         ref_pf = pd.read_csv(ref_pf_file)
 
         fig, axes = plt.subplots(2, 2, figsize=(14, 12))
@@ -292,24 +291,25 @@ def main():
     # ============================================================================
     # 4. Sensitivity Analysis: HV 비교
     # ============================================================================
+    # 4a. Sensitivity Analysis: HV 비교 (Exp1 변형들만)
+    # ============================================================================
 
     print("\n📈 생성 중: sensitivity_hv.png")
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
     sensitivity_configs = [
-        ("Base\n(50-20-30)", "exp2"),
-        ("High Carb\n(65-18-17)", "high_carb"),
-        ("Low Carb\n(35-22-43)", "low_carb"),
-        ("Mid-Balanced\n(45-25-30)", "mid_balanced"),
-        ("Low Protein\n(50-10-40)", "low_protein")
+        ("High Carb\n(65-10-25)", "high_carb"),
+        ("Low Carb\n(50-20-30)", "low_carb"),
+        ("Mid-Balanced\n(57-15-28)", "mid_balanced"),
+        ("Low Protein\n(60-10-30)", "low_protein")
     ]
 
     hv_values = []
     hv_stds = []
     sensitivity_names = []
     colors_list = []
-    color_map = {'exp2': 'lightgray', 'high_carb': 'skyblue', 'low_carb': 'lightyellow',
+    color_map = {'high_carb': 'skyblue', 'low_carb': 'lightyellow',
                  'mid_balanced': 'lightgreen', 'low_protein': 'lightcoral'}
 
     # 누락된 실험 건너뛰기
@@ -328,7 +328,7 @@ def main():
                   edgecolor='black', linewidth=1.5, alpha=0.8)
 
     ax.set_ylabel("HV (± std)", fontsize=12, fontweight='bold')
-    ax.set_title("영양 프로필 민감도 분석 — Hypervolume", fontsize=13, fontweight='bold')
+    ax.set_title("Exp1 영양 프로필 민감도 분석 — Hypervolume (2목적)", fontsize=13, fontweight='bold')
     ax.set_xticks(x)
     ax.set_xticklabels(sensitivity_names, fontsize=10)
     ax.grid(axis='y', alpha=0.3)
@@ -342,6 +342,52 @@ def main():
     plt.savefig(figures_dir / "sensitivity_hv.png", dpi=150, bbox_inches='tight')
     plt.close()
     print(f"  ✓ 저장: {figures_dir / 'sensitivity_hv.png'}")
+
+    # ============================================================================
+    # 4b. Comparison Chart: Exp2 vs Exp3 Hypervolume
+    # ============================================================================
+
+    if "exp2" in data and "exp3" in data:
+        print("\n📈 생성 중: comparison_exp2_vs_exp3_hv.png")
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        names = ["Exp2 (3-obj)\nNSGA-II", "Exp3 (4-obj)\nR-NSGA-II"]
+        hv_values = [
+            data["exp2"]["HV"].mean(),
+            data["exp3"]["HV"].mean()
+        ]
+        hv_stds = [
+            data["exp2"]["HV"].std(),
+            data["exp3"]["HV"].std()
+        ]
+
+        x = np.arange(len(names))
+        colors = ['lightblue', 'lightcoral']
+
+        bars = ax.bar(x, hv_values, yerr=hv_stds, capsize=10, color=colors,
+                      edgecolor='black', linewidth=1.5, alpha=0.8)
+
+        ax.set_ylabel("HV (± std)", fontsize=12, fontweight='bold')
+        ax.set_title("Exp2 vs Exp3 Hypervolume 비교", fontsize=13, fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels(names, fontsize=10)
+        ax.grid(axis='y', alpha=0.3)
+
+        # 값 표시
+        for bar, hv, std in zip(bars, hv_values, hv_stds):
+            ax.text(bar.get_x() + bar.get_width()/2, hv + std + 0.05,
+                    f"{hv:.3f}", ha='center', fontsize=9, fontweight='bold')
+
+        plt.tight_layout()
+        plt.savefig(figures_dir / "comparison_exp2_vs_exp3_hv.png", dpi=150, bbox_inches='tight')
+        plt.close()
+        print(f"  ✓ 저장: {figures_dir / 'comparison_exp2_vs_exp3_hv.png'}")
+    else:
+        if "exp3" not in data:
+            print("\n⚠️  comparison_exp2_vs_exp3_hv.png 생성 스킵 (EXP3 결과 없음)")
+        else:
+            print("\n⚠️  comparison_exp2_vs_exp3_hv.png 생성 스킵 (EXP2 결과 없음)")
 
     # ============================================================================
     # 통계 검정: Wilcoxon 부호순위 검정
