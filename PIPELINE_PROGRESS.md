@@ -1,9 +1,9 @@
 # 파이프라인 진행 상황
 
 ## 현재 상태
-- **완료**: Step 5 — KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II) + 7일 시뮬레이션 검증 ✅
-- **다음 작업**: 30회 본실험 실행 (`daily_exp3_rnsga2.yaml`) + 결과 분석
-- 마지막 업데이트: 2026-05-03 (Session 9 종료, KG·R-NSGA-II 구현 + 시뮬레이션 완료)
+- **완료**: Step 5 — KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II) + 7일 시뮬레이션 검증 + **30회 본실험** ✅
+- **다음 작업**: 결과 분석 (analyze_results.py 실행)
+- 마지막 업데이트: 2026-05-06 (Session 10 종료, PR #2 피드백 처리 + DailyExp3 30회 본실험 완료)
 
 ## 단계별 완료 현황
 | 단계 | 내용 | 상태 | 수치 |
@@ -17,7 +17,7 @@
 | Step 2b | 영양성분 불량 행 데이터 클렌징 | ✅ | 14개 삭제, 최종 3,358행 (SNACK 1,101 / MAIN 957 / SIDE 688 / DRINK 441 / SOUP 171) |
 | Step 2c | price 이상치 처리 (IQR Tukey's fence → SQL NULL) | ✅ | LOW 16개 + HIGH 126개 → NULL (SQL 일괄 처리) |
 | Step 3-4 | 다목적 최적화 실험 프레임워크 (NSGA-II, Exp1~2) | ✅ | GD/IGD/HV/Spread 지표 완비 |
-| **Step 5** | **KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II)** | ✅ | **7일 시뮬레이션 Hit Rate 100%** |
+| **Step 5** | **KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II)** | ✅ | **30회 본실험 완료: GD=0.0120, IGD=0.0329, HV=0.0069** |
 
 ## Session 9 완료 내용 (2026-05-03)
 
