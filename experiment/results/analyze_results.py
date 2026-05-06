@@ -12,12 +12,10 @@ Environment Variables:
 """
 
 import os
-import sys
 import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 from scipy import stats
 from glob import glob
@@ -262,26 +260,34 @@ print("\n📈 생성 중: sensitivity_hv.png")
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
-sensitivity_names = ["Base\n(50-20-30)", "High Carb\n(65-18-17)",
-                     "Low Carb\n(35-22-43)", "Mid-Balanced\n(45-25-30)",
-                     "Low Protein\n(50-10-40)"]
-sensitivity_keys = ["exp2", "high_carb", "low_carb", "mid_balanced", "low_protein"]
+sensitivity_configs = [
+    ("Base\n(50-20-30)", "exp2"),
+    ("High Carb\n(65-18-17)", "high_carb"),
+    ("Low Carb\n(35-22-43)", "low_carb"),
+    ("Mid-Balanced\n(45-25-30)", "mid_balanced"),
+    ("Low Protein\n(50-10-40)", "low_protein")
+]
 
 hv_values = []
 hv_stds = []
+sensitivity_names = []
+colors_list = []
+color_map = {'exp2': 'lightgray', 'high_carb': 'skyblue', 'low_carb': 'lightyellow',
+             'mid_balanced': 'lightgreen', 'low_protein': 'lightcoral'}
 
-for key in sensitivity_keys:
+# 누락된 실험 건너뛰기
+for name, key in sensitivity_configs:
     if key in data:
         hv_values.append(data[key]["HV"].mean())
         hv_stds.append(data[key]["HV"].std())
+        sensitivity_names.append(name)
+        colors_list.append(color_map[key])
     else:
-        hv_values.append(0)
-        hv_stds.append(0)
+        print(f"  ⚠️  {key} 결과 누락: 시각화에서 제외")
 
 x = np.arange(len(sensitivity_names))
-colors = ['lightgray', 'skyblue', 'lightyellow', 'lightgreen', 'lightcoral']
 
-bars = ax.bar(x, hv_values, yerr=hv_stds, capsize=8, color=colors,
+bars = ax.bar(x, hv_values, yerr=hv_stds, capsize=8, color=colors_list,
               edgecolor='black', linewidth=1.5, alpha=0.8)
 
 ax.set_ylabel("HV (± std)", fontsize=12, fontweight='bold')
@@ -311,17 +317,28 @@ if "exp3" in data and "exp2" in data:
     metrics_to_test = ["GD", "IGD", "HV", "Spread"]
 
     for metric in metrics_to_test:
-        exp2_vals = data["exp2"][metric].values
-        exp3_vals = data["exp3"][metric].values
+        # 데이터 정렬 및 NaN 제거 (paired comparison)
+        exp2_df = data["exp2"][["seed", metric]].dropna()
+        exp3_df = data["exp3"][["seed", metric]].dropna()
 
-        statistic, p_value = stats.wilcoxon(exp2_vals, exp3_vals)
+        # seed 기준으로 merge (paired data)
+        merged = pd.merge(exp2_df, exp3_df, on="seed", how="inner", suffixes=("_exp2", "_exp3"))
 
-        mean_exp2 = exp2_vals.mean()
-        mean_exp3 = exp3_vals.mean()
+        if len(merged) < 2:
+            print(f"{metric:8s} | ⚠️  충분한 paired data가 없음 (n={len(merged)})")
+            continue
 
-        significant = "✓" if p_value < 0.05 else "✗"
+        exp2_vals = merged[f"{metric}_exp2"].values
+        exp3_vals = merged[f"{metric}_exp3"].values
 
-        print(f"{metric:8s} | Exp2: {mean_exp2:.4f} | Exp3: {mean_exp3:.4f} | p={p_value:.6f} {significant}")
+        try:
+            statistic, p_value = stats.wilcoxon(exp2_vals, exp3_vals)
+            mean_exp2 = exp2_vals.mean()
+            mean_exp3 = exp3_vals.mean()
+            significant = "✓" if p_value < 0.05 else "✗"
+            print(f"{metric:8s} | Exp2: {mean_exp2:.4f} | Exp3: {mean_exp3:.4f} | p={p_value:.6f} {significant} (n={len(merged)})")
+        except Exception as e:
+            print(f"{metric:8s} | ⚠️  Wilcoxon 검정 실패: {str(e)}")
 else:
     if "exp3" not in data:
         print("\n⚠️  Wilcoxon 검정 스킵 (EXP3 결과 없음)")
