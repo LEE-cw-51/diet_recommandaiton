@@ -12,12 +12,10 @@ Environment Variables:
 """
 
 import os
-import sys
 import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 from scipy import stats
 from glob import glob
