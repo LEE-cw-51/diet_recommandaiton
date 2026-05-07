@@ -26,10 +26,10 @@ from pathlib import Path
 
 import numpy as np
 
-from experiment import PROJECT_ROOT  # internal use only
+from experiment import _PROJECT_ROOT
 
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -375,7 +375,7 @@ def main() -> None:
     if args.test:
         print("⚡ [TEST MODE] pop=10, gen=5, days=2")
 
-    out_dir = PROJECT_ROOT / args.out_dir
+    out_dir = _PROJECT_ROOT / args.out_dir
 
     for persona_name in args.personas:
         if persona_name not in PERSONAS:
