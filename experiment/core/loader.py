@@ -12,11 +12,11 @@ import sys
 
 import pandas as pd
 
-from experiment import PROJECT_ROOT  # internal use only
+from experiment import _PROJECT_ROOT
 
 # 프로젝트 루트를 sys.path에 추가 (db.client import 용)
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 ALLERGEN_22 = [
     "난류", "우유", "메밀", "땅콩", "대두", "밀", "고등어", "게", "새우",
