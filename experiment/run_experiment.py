@@ -29,7 +29,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from experiment import PROJECT_ROOT
+from experiment import PROJECT_ROOT  # internal use only
 
 # 프로젝트 루트를 sys.path에 추가
 if str(PROJECT_ROOT) not in sys.path:

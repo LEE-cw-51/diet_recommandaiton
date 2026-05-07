@@ -12,7 +12,7 @@ import sys
 
 import pandas as pd
 
-from experiment import PROJECT_ROOT
+from experiment import PROJECT_ROOT  # internal use only
 
 # 프로젝트 루트를 sys.path에 추가 (db.client import 용)
 if str(PROJECT_ROOT) not in sys.path:
