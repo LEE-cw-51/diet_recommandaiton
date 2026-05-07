@@ -106,32 +106,3 @@ def _build_rnsga2(cfg: dict):
         ),
         eliminate_duplicates=cfg.get("eliminate_duplicates", True),
     )
-
-
-# ------------------------------------------------------------------
-# 미래 확장 예시 (주석 해제 후 사용)
-# ------------------------------------------------------------------
-
-# @register("MOEAD")
-# def _build_moeaD(cfg: dict):
-#     from pymoo.algorithms.moo.moead import MOEAD
-#     from pymoo.operators.sampling.rnd import IntegerRandomSampling
-#     from pymoo.util.ref_dirs import get_reference_directions
-#     ref_dirs = get_reference_directions("das-dennis", cfg.get("n_obj", 2),
-#                                         n_partitions=cfg.get("n_partitions", 12))
-#     return MOEAD(ref_dirs, n_neighbors=cfg.get("n_neighbors", 15),
-#                  sampling=IntegerRandomSampling())
-
-
-# @register("SPEA2")
-# def _build_spea2(cfg: dict):
-#     from pymoo.algorithms.moo.spea2 import SPEA2
-#     from pymoo.operators.crossover.pntx import PointCrossover
-#     from pymoo.operators.mutation.pm import PM
-#     from pymoo.operators.sampling.rnd import IntegerRandomSampling
-#     return SPEA2(
-#         pop_size=cfg["pop_size"],
-#         sampling=IntegerRandomSampling(),
-#         crossover=PointCrossover(prob=cfg.get("crossover", {}).get("prob", 0.9)),
-#         mutation=PM(prob=cfg.get("mutation", {}).get("prob", 0.1)),
-#     )

@@ -1,5 +1,5 @@
 # Pareto front decoder and summary analyzer.
-# Run from: C:/Users/chanw/Desktop/diet_recommendation
+# Run with: python -m experiment.results.analyze_pareto  (from project root)
 
 import sys
 import os
@@ -8,8 +8,8 @@ import io
 # Force UTF-8 output on Windows console
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-# Ensure project root is on the path
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+# Ensure project root is on the path (script lives at experiment/results/, so go up 2 levels)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
 import pandas as pd

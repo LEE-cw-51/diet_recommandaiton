@@ -18,7 +18,7 @@ from __future__ import annotations
 import numpy as np
 from pymoo.core.problem import ElementwiseProblem
 
-from .nutrition import NutritionProfile
+from .nutrition import NutritionProfile, compute_macro_ratios
 
 
 class BaseDietProblem(ElementwiseProblem):
@@ -76,24 +76,13 @@ class BaseDietProblem(ElementwiseProblem):
 
     def totals(self, combo: list[dict]) -> dict:
         """콤보의 영양소·가격 합산."""
-        keys = ["calories", "protein", "carbs", "fat", "sugars", "sodium", "price"]
+        # NOTE: DB 컬럼명은 단수형 'sugar' (loader.py 기준). 'sugars'로 두면 silent 0 합계.
+        keys = ["calories", "protein", "carbs", "fat", "sugar", "sodium", "price"]
         return {k: float(sum(item.get(k, 0) or 0 for item in combo)) for k in keys}
 
     def macro_ratios(self, t: dict) -> tuple[float, float, float]:
-        """실제 매크로 비율 (칼로리 기준).
-
-        r_C = carbs*4 / total_macro_kcal
-        r_P = protein*4 / total_macro_kcal
-        r_F = fat*9 / total_macro_kcal
-        """
-        macro_kcal = t["carbs"] * 4 + t["protein"] * 4 + t["fat"] * 9
-        if macro_kcal <= 0:
-            return 0.0, 0.0, 0.0
-        return (
-            (t["carbs"] * 4) / macro_kcal,
-            (t["protein"] * 4) / macro_kcal,
-            (t["fat"] * 9) / macro_kcal,
-        )
+        """실제 매크로 비율 (r_C, r_P, r_F). 구현은 nutrition.compute_macro_ratios 참조."""
+        return compute_macro_ratios(t)
 
     def _allergen_g(self, combo: list[dict]) -> float:
         """알레르겐 제약 값. > 0이면 위반(infeasible), ≤ 0이면 안전."""
