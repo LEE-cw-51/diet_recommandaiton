@@ -9,14 +9,14 @@ food_master.allergens 컬럼은 JSONB {"알레르겐명": bool, ...} 형식.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import pandas as pd
 
+from experiment import PROJECT_ROOT
+
 # 프로젝트 루트를 sys.path에 추가 (db.client import 용)
-_ROOT = Path(__file__).resolve().parents[2]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 ALLERGEN_22 = [
     "난류", "우유", "메밀", "땅콩", "대두", "밀", "고등어", "게", "새우",

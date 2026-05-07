@@ -64,6 +64,24 @@ class NutritionProfile:
         return cls(label="base_50_20_30", r_C=0.50, r_P=0.20, r_F=0.30)
 
 
+def compute_macro_ratios(t: dict) -> tuple[float, float, float]:
+    """totals 딕셔너리로부터 실제 매크로 비율 (r_C, r_P, r_F) 계산.
+
+    매크로 칼로리 = carbs*4 + protein*4 + fat*9
+    각 비율 = 해당 매크로 kcal / 매크로 총 kcal
+
+    매크로 kcal이 0 이하이면 (0.0, 0.0, 0.0) 반환.
+    """
+    macro_kcal = t["carbs"] * 4 + t["protein"] * 4 + t["fat"] * 9
+    if macro_kcal <= 0:
+        return 0.0, 0.0, 0.0
+    return (
+        (t["carbs"] * 4) / macro_kcal,
+        (t["protein"] * 4) / macro_kcal,
+        (t["fat"] * 9) / macro_kcal,
+    )
+
+
 # 사전 정의된 민감도 분석 시나리오 (모두 r_C + r_P + r_F = 1.0)
 #
 #  시나리오          탄    단    지    합계   설명

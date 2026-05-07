@@ -29,7 +29,7 @@
 | `experiment/core/kg_manager.py` | NetworkX MultiDiGraph KG (IS_IN / PREFERS / ATE 엣지) |
 | `experiment/core/daily_exp3_problem.py` | 4목적 문제 (f1 칼로리·f2 매크로·f3 가격·f4 KG오차율) |
 | `experiment/config/daily_exp3_rnsga2.yaml` | R-NSGA-II 실험 설정 (pop=200, gen=200, n_runs=30) |
-| `experiment/simulate_kg.py` | 2페르소나 × 7일 시뮬레이션 검증 스크립트 |
+| `experiment/tools/simulate_kg.py` | 2페르소나 × 7일 시뮬레이션 검증 스크립트 (`python -m experiment.tools.simulate_kg ...`) |
 | `experiment/results/simulation/` | 시뮬레이션 결과 CSV |
 
 **수정 파일**

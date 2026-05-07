@@ -29,10 +29,11 @@ import argparse
 import sys
 from pathlib import Path
 
+from experiment import PROJECT_ROOT
+
 # 프로젝트 루트를 sys.path에 추가
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def main():
@@ -66,7 +67,7 @@ def main():
     config_path = Path(args.config)
     if not config_path.exists():
         # 프로젝트 루트 기준으로 재시도
-        config_path = _ROOT / args.config
+        config_path = PROJECT_ROOT / args.config
         if not config_path.exists():
             print(f"❌ 설정 파일을 찾을 수 없음: {args.config}")
             sys.exit(1)
