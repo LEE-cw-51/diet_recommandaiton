@@ -67,7 +67,7 @@ def main():
     config_path = Path(args.config)
     if not config_path.exists():
         # 프로젝트 루트 기준으로 재시도
-        config_path = PROJECT_ROOT / args.config
+        config_path = _PROJECT_ROOT / args.config
         if not config_path.exists():
             print(f"❌ 설정 파일을 찾을 수 없음: {args.config}")
             sys.exit(1)
