@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from experiment import PROJECT_ROOT
+from experiment import PROJECT_ROOT  # internal use only
 
 # 결과 저장 디렉토리 (프로젝트 루트 기준)
 _RESULTS_DIR = PROJECT_ROOT / "experiment" / "results" / "output"

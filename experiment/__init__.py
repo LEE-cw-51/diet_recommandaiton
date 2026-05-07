@@ -1,13 +1,18 @@
-"""diet_recommendation experiment package.
+"""experiment package — internal use only.
 
-공통 상수:
-  PROJECT_ROOT — 프로젝트 루트 절대경로 (loader/runner/CLI에서 sys.path 추가에 사용)
+Internal constants:
+  _PROJECT_ROOT — 프로젝트 루트 절대경로 (loader/runner/CLI에서 sys.path 추가에만 사용)
+                  외부에서는 직접 참조하지 말 것.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
+# Internal constant — do NOT use outside of experiment package
+_PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
 
-__all__ = ["PROJECT_ROOT"]
+# Re-export for backward compatibility (internal modules only)
+PROJECT_ROOT = _PROJECT_ROOT
+
+__all__ = []  # No public API
