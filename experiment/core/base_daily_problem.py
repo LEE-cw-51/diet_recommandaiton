@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 from pymoo.core.problem import ElementwiseProblem
 
-from .nutrition import NutritionProfile
+from .nutrition import NutritionProfile, compute_macro_ratios
 
 
 class BaseDailyDietProblem(ElementwiseProblem):
@@ -113,15 +113,8 @@ class BaseDailyDietProblem(ElementwiseProblem):
         return {k: float(sum(item.get(k, 0) or 0 for item in combo)) for k in keys}
 
     def macro_ratios(self, t: dict) -> tuple[float, float, float]:
-        """실제 매크로 비율 (칼로리 기준)."""
-        macro_kcal = t["carbs"] * 4 + t["protein"] * 4 + t["fat"] * 9
-        if macro_kcal <= 0:
-            return 0.0, 0.0, 0.0
-        return (
-            (t["carbs"] * 4) / macro_kcal,
-            (t["protein"] * 4) / macro_kcal,
-            (t["fat"] * 9) / macro_kcal,
-        )
+        """실제 매크로 비율 (r_C, r_P, r_F). 구현은 nutrition.compute_macro_ratios 참조."""
+        return compute_macro_ratios(t)
 
     def _allergen_g(self, combo: list[dict]) -> float:
         """알레르겐 제약 (데이터 로딩 시 사전 필터링 완료 → 항상 -1.0)."""

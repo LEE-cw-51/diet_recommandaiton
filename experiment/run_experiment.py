@@ -29,10 +29,18 @@ import argparse
 import sys
 from pathlib import Path
 
-# 프로젝트 루트를 sys.path에 추가
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+# 스크립트를 직접 실행해도(`python experiment/run_experiment.py ...`)
+# `experiment` 패키지 import가 가능하도록, 현재 파일 위치를 기준으로
+# 프로젝트 루트를 먼저 계산해 sys.path에 추가한다.
+_BOOTSTRAP_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_BOOTSTRAP_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BOOTSTRAP_PROJECT_ROOT))
+
+from experiment import _PROJECT_ROOT
+
+# 패키지에서 정의한 프로젝트 루트를 다시 한번 보장
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 
 def main():
@@ -66,7 +74,7 @@ def main():
     config_path = Path(args.config)
     if not config_path.exists():
         # 프로젝트 루트 기준으로 재시도
-        config_path = _ROOT / args.config
+        config_path = _PROJECT_ROOT / args.config
         if not config_path.exists():
             print(f"❌ 설정 파일을 찾을 수 없음: {args.config}")
             sys.exit(1)
