@@ -1,5 +1,5 @@
 # Pareto front decoder and summary analyzer.
-# Run with: python -m experiment.results.analyze_pareto  (from project root)
+# Run with: python experiment/results/analyze_pareto.py  (from project root)
 
 import sys
 import os
@@ -8,7 +8,7 @@ import io
 # Force UTF-8 output on Windows console
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-# Ensure project root is on the path (script lives at experiment/results/, so go up 2 levels)
+# Ensure project root is on the path (script lives at experiment/results/, so go up 3 levels)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
