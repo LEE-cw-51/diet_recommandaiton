@@ -11,8 +11,8 @@
   4. 카테고리가 특정 메뉴로 편중되지 않는가 (Diversity)
 
 사용법:
-  python -X utf8 experiment/simulate_kg.py --days 7 --cal_star 2000 --price_star 8000
-  python -X utf8 experiment/simulate_kg.py --days 7 --cal_star 2000 --price_star 8000 --test
+  python -X utf8 -m experiment.tools.simulate_kg --days 7 --cal_star 2000 --price_star 8000
+  python -X utf8 -m experiment.tools.simulate_kg --days 7 --cal_star 2000 --price_star 8000 --test
 """
 
 from __future__ import annotations
@@ -26,9 +26,10 @@ from pathlib import Path
 
 import numpy as np
 
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+from experiment import _PROJECT_ROOT
+
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -374,7 +375,7 @@ def main() -> None:
     if args.test:
         print("⚡ [TEST MODE] pop=10, gen=5, days=2")
 
-    out_dir = _ROOT / args.out_dir
+    out_dir = _PROJECT_ROOT / args.out_dir
 
     for persona_name in args.personas:
         if persona_name not in PERSONAS:

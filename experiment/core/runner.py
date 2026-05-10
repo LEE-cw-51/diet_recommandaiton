@@ -22,9 +22,10 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-# 프로젝트 루트 기준 경로 설정
-_ROOT = Path(__file__).resolve().parents[2]
-_RESULTS_DIR = _ROOT / "experiment" / "results" / "output"
+from experiment import _PROJECT_ROOT
+
+# 결과 저장 디렉토리 (프로젝트 루트 기준)
+_RESULTS_DIR = _PROJECT_ROOT / "experiment" / "results" / "output"
 
 PROBLEM_REGISTRY = {
     "Exp1Problem":      "experiment.core.exp1_problem.Exp1Problem",

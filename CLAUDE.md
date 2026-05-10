@@ -13,7 +13,7 @@
 `.env`에만 저장. 코드 하드코딩 금지. `os.environ["KEY_NAME"]` 사용.
 
 ## 5. Supabase 스키마 변경
-DDL은 Python 코드에서 직접 실행 금지 → Supabase Dashboard > SQL Editor에서 실행 후 `python verify_schema.py` 검증.
+DDL은 Python 코드에서 직접 실행 금지 → Supabase Dashboard > SQL Editor에서 실행 후 `python qa/verify_schema.py` 검증.
 
 ## 6. 세션 루틴
 - **시작**: `PIPELINE_PROGRESS.md` 읽어 현재 상태 파악
