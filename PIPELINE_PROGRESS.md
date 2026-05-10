@@ -2,8 +2,9 @@
 
 ## 현재 상태
 - **완료**: Step 5 — KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II) + 7일 시뮬레이션 검증 + **30회 본실험** ✅
+- **완료**: **프로젝트 구조 정리 + experiment/ 코드 품질 정리** ✅ (PR #3 merge)
 - **다음 작업**: 결과 분석 (analyze_results.py 실행)
-- 마지막 업데이트: 2026-05-06 (Session 10 종료, PR #2 피드백 처리 + DailyExp3 30회 본실험 완료)
+- 마지막 업데이트: 2026-05-11 (Session 11 종료, PR #3 merge 완료)
 
 ## 단계별 완료 현황
 | 단계 | 내용 | 상태 | 수치 |
@@ -18,6 +19,54 @@
 | Step 2c | price 이상치 처리 (IQR Tukey's fence → SQL NULL) | ✅ | LOW 16개 + HIGH 126개 → NULL (SQL 일괄 처리) |
 | Step 3-4 | 다목적 최적화 실험 프레임워크 (NSGA-II, Exp1~2) | ✅ | GD/IGD/HV/Spread 지표 완비 |
 | **Step 5** | **KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II)** | ✅ | **30회 본실험 완료: GD=0.0120, IGD=0.0329, HV=0.0069** |
+
+## Session 11 완료 내용 (2026-05-11)
+
+### PR #3: 대규모 프로젝트 구조 정리 + experiment/ 코드 품질 개선 — MERGE 완료
+
+**Phase A: 루트 산제 파일 재배치**
+| 파일 | 이동 경로 | 비고 |
+|------|---------|------|
+| `analyze_pareto.py` | `experiment/results/analyze_pareto.py` | analyze_results.py와 공존 (별도 분석 스크립트) |
+| `verify_schema.py` | `qa/verify_schema.py` | 기존 verify_final_db.py와 함께 |
+| `figure1_core_metrics.png` | `experiment/results/figures/` | 실험 결과물 통합 |
+| `figure2_macro_accuracy.png` | `experiment/results/figures/` | 동상 |
+| `nutrition_raw_data.json` (루트) | 삭제 | `database/nutrition_raw_data.json`과 동일 내용 |
+
+**Phase B: experiment/ 코드 품질 정리**
+
+1. ✅ **sugar 키 버그 수정** (base_problem.py:79)
+   - 변경: `"sugars"` → `"sugar"` (DB 컬럼명과 일치)
+   - 영향: totals()["sugar"] 정상 합계 반환 (목적함수에 직접 영향은 없으나 향후 확장 대비)
+
+2. ✅ **_PROJECT_ROOT 경로 단일화**
+   - 기존: loader.py, runner.py, run_experiment.py에서 각각 `Path(__file__).resolve().parents[2]` 반복
+   - 변경: `experiment/__init__.py`에 `_PROJECT_ROOT` 상수 정의 → 모든 모듈에서 `from experiment import _PROJECT_ROOT`로 import
+   - 영향: 경로 관리 일관성 확보, 변경 시 한 곳만 수정
+
+3. ✅ **macro_ratios() 중복 제거**
+   - 기존: BaseDietProblem.macro_ratios() + BaseDailyDietProblem.macro_ratios() (동일 로직)
+   - 변경: `experiment/core/nutrition.py`에 `compute_macro_ratios(t: dict)` 함수 추가 → 두 base 클래스는 해당 함수를 호출하는 thin wrapper로 변경
+   - 영향: 코드 중복 제거, 단일 정의 원칙
+
+4. ✅ **factory.py 데드코드 제거**
+   - 삭제: lines 111-137 (주석처리된 `_build_moeaD()`, `_build_spea2()`)
+   - 이유: docstring(1-9행)에 확장 패턴이 이미 안내되어 있어 정보 손실 없음
+
+5. ✅ **simulate_kg.py 위치 정리**
+   - 이동: `experiment/simulate_kg.py` → `experiment/tools/simulate_kg.py`
+   - 이유: 본 실험 파이프라인이 아닌 디버깅/검증용 오프라인 스크립트 → tools 디렉토리로 명확화
+   - 사용 명령어: `python experiment/tools/simulate_kg.py`
+
+**검증 완료**
+- ✅ analyze_pareto.py 신규 경로 동작 확인
+- ✅ experiment/__init__.py import 정상 작동
+- ✅ factory.py 알고리즘 리스트 출력 정상
+- ✅ simulate_kg.py 실행 정상
+
+**PR #3 merge 완료** (사용자 진행, branch 삭제)
+
+---
 
 ## Session 9 완료 내용 (2026-05-03)
 
