@@ -81,15 +81,19 @@ def plot_pareto_scatter(
         print("⚠ matplotlib 없음 — 그래프 생략")
         return
 
-    # 목적함수 인덱스 (0-based)
+    # 목적함수 인덱스 (0-based) — 4목적 전체 조합 C(4,2)=6
     PAIRS = [
-        (0, 2, "f1 (Calorie Error)", "f3 (Price Error)"),
-        (0, 3, "f1 (Calorie Error)", "f4 (KG Error Rate)"),
-        (2, 3, "f3 (Price Error)",   "f4 (KG Error Rate)"),
+        (0, 1, "f1 (Calorie Error)",  "f2 (Macro Ratio Error)"),
+        (0, 2, "f1 (Calorie Error)",  "f3 (Price Error)"),
+        (0, 3, "f1 (Calorie Error)",  "f4 (KG Error Rate)"),
+        (1, 2, "f2 (Macro Ratio Error)", "f3 (Price Error)"),
+        (1, 3, "f2 (Macro Ratio Error)", "f4 (KG Error Rate)"),
+        (2, 3, "f3 (Price Error)",    "f4 (KG Error Rate)"),
     ]
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    fig.suptitle("Pareto Front Projection: G1 vs G2 vs G3", fontsize=13, y=1.01)
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    axes = axes.flatten()
+    fig.suptitle("Pareto Front Projection: G1 vs G2 vs G3 (All 6 Pairs)", fontsize=13)
 
     styles = {
         "G1 (NSGA-II)":        (g1_pf,    "gray",   "x",  60, 0.7),
