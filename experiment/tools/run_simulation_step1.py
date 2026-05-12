@@ -69,7 +69,7 @@ HV_SAMPLE_EVERY = 10  # Callback: 매 10세대마다 F 스냅샷 수집
 # 비어있는 KG에서는 G2/G3 모두 f4가 동일하게 나와 비교 의미 없음.
 # MAIN 선호(1.2)·DRINK 비선호(0.8)와 섭취 이력 2건을 사전 세팅.
 TEST_USER      = "test_user_1"
-KG_PREFERENCES = {"MAIN": 1.2, "DRINK": 0.8}
+KG_PREFERENCES = {"MAIN": 4, "DRINK": 2}  # 별점 1~5 → P_i = rating/3.0
 KG_HISTORY     = [
     {"menu_id": "비빔밥",   "timestamp": "2026-05-06T12:00:00"},
     {"menu_id": "된장찌개", "timestamp": "2026-05-06T19:00:00"},

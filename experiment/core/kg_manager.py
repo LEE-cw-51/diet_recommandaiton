@@ -12,18 +12,23 @@
 
   ※ MultiDiGraph로 같은 (user→menu) 쌍에 PREFERS·ATE 동시 저장 가능.
 
+선호도(P_i):
+  별점(1~5) 기반: P_i = rating / 3.0
+    1★ → 0.33, 3★ → 1.0(중립), 5★ → 1.67
+  카테고리 PREFERS가 없으면 기본값 1.0 (3★ 중립과 동등)
+  set_rating()으로 별점 입력 → set_preference()로 내부 저장
+
 추천 점수 공식:
   Score_KG(i) = P_i × (1 - D_i)
-  D_i = max_j( Sim(i,j) × e^{-λ·Δt_j} )
-    Sim = 1.0 (직접 ATE), 0.5 (동일 카테고리 형제 메뉴)
+  D_i = e^{-λ·Δt}  (직접 ATE일 때만, Δt = 경과 일수)
+  슬롯이 카테고리별로 고정(MAIN/SIDE_SOUP/DRINK)되므로 형제 메뉴 유사도 불필요.
 
 f4 오차율:
   f4 = (max_score - avg_score) / max_score  ∈ [0, 1]
-  max_score = 최대 PREFERS 가중치 (감쇠 없음 기준)
+  max_score = 최대 PREFERS 가중치 (감쇠 없음 기준, 기본 1.0 포함)
 
 성능 최적화:
   - _menu_to_category : 메뉴 ID → 카테고리 O(1) 조회
-  - _ate_by_category  : 카테고리 → {menu_id: timestamp} 빠른 형제 탐색
 """
 
 from __future__ import annotations
@@ -70,8 +75,6 @@ class KGManager:
         self.G: nx.MultiDiGraph = nx.MultiDiGraph()
         # 성능 인덱스
         self._menu_to_category: dict[str, str] = {}
-        # (user_id → category → {menu_id: timestamp}) — 형제 탐색 가속
-        self._ate_by_category: dict[str, dict[str, dict[str, datetime]]] = {}
 
     # ------------------------------------------------------------------
     # 그래프 구성
@@ -84,6 +87,15 @@ class KGManager:
         if not self.G.has_edge(menu_id, category, key="IS_IN"):
             self.G.add_edge(menu_id, category, key="IS_IN")
         self._menu_to_category[menu_id] = category
+
+    def set_rating(self, user_id: str, target_id: str, rating: int) -> None:
+        """별점(1~5)을 선호도 가중치로 변환하여 PREFERS 엣지 추가/갱신.
+
+        P_i = rating / 3.0  →  1★=0.33, 3★=1.0(중립), 5★=1.67
+        """
+        if not (1 <= rating <= 5):
+            raise ValueError(f"rating must be 1~5, got {rating}")
+        self.set_preference(user_id, target_id, rating / 3.0)
 
     def set_preference(self, user_id: str, target_id: str, weight: float) -> None:
         """PREFERS 엣지 추가/갱신. target은 메뉴 ID 또는 카테고리명."""
@@ -119,18 +131,9 @@ class KGManager:
 
         if self.G.has_edge(user_id, menu_id, key="ATE"):
             existing = self.G[user_id][menu_id]["ATE"]["timestamp"]
-            new_ts = max(existing, timestamp)
-            self.G[user_id][menu_id]["ATE"]["timestamp"] = new_ts
+            self.G[user_id][menu_id]["ATE"]["timestamp"] = max(existing, timestamp)
         else:
             self.G.add_edge(user_id, menu_id, key="ATE", timestamp=timestamp)
-            new_ts = timestamp
-
-        # 인덱스 갱신
-        cat = self._menu_to_category.get(menu_id)
-        if cat:
-            user_idx = self._ate_by_category.setdefault(user_id, {})
-            cat_idx  = user_idx.setdefault(cat, {})
-            cat_idx[menu_id] = new_ts
 
     # ------------------------------------------------------------------
     # 점수 계산
@@ -174,27 +177,14 @@ class KGManager:
             if cat and self.G.has_edge(user_id, cat, key="PREFERS"):
                 preference = float(self.G[user_id][cat]["PREFERS"].get("weight", 1.0))
 
-        # ── 2) 시간 감쇠(D_i) — D_i = max_j(Sim·e^{-λΔt}), Δt ≥ 0 ────
+        # ── 2) 시간 감쇠(D_i) — D_i = e^{-λΔt} (직접 ATE일 때만) ─────────
+        # 슬롯이 카테고리별로 고정(MAIN/SIDE_SOUP/DRINK)되므로 형제 유사도 불필요.
         decay = 0.0
-
-        # 2-a) 직접 ATE (Sim = 1.0)
         if self.G.has_edge(user_id, menu_id, key="ATE"):
             ts = self.G[user_id][menu_id]["ATE"].get("timestamp")
             if ts:
                 delta_days = max(0.0, (now - ts).total_seconds() / 86400.0)
-                decay = max(decay, math.exp(-lambda_decay * delta_days))
-
-        # 2-b) 동일 카테고리 형제 메뉴 ATE (Sim = 0.5)
-        cat = self._menu_to_category.get(menu_id)
-        if cat:
-            sibling_ate = (self._ate_by_category.get(user_id, {}).get(cat, {}))
-            for sib_id, sib_ts in sibling_ate.items():
-                if sib_id == menu_id:
-                    continue
-                delta_days = max(0.0, (now - sib_ts).total_seconds() / 86400.0)
-                decay = max(decay, 0.5 * math.exp(-lambda_decay * delta_days))
-
-        # decay ∈ [0, 1] 보장 (Δt 음수 방지로 이미 보장되지만 안전)
+                decay = math.exp(-lambda_decay * delta_days)
         decay = min(1.0, max(0.0, decay))
         # 음수 weight 방어: preference가 음수여도 score는 0 이상 보장
         score = preference * (1.0 - decay)
@@ -268,10 +258,14 @@ class KGManager:
                 pass
             return target_id
 
-        # 선호도 설정
+        # 선호도 설정 — 정수(1~5)면 별점으로 해석, float이면 raw weight로 저장
         n_prefs_set = 0
-        for target_id, weight in (kg_cfg.get("preferences") or {}).items():
-            kg.set_preference(user_id, _normalize_target_id(str(target_id)), float(weight))
+        for target_id, value in (kg_cfg.get("preferences") or {}).items():
+            tid = _normalize_target_id(str(target_id))
+            if isinstance(value, int) and 1 <= value <= 5:
+                kg.set_rating(user_id, tid, value)
+            else:
+                kg.set_preference(user_id, tid, float(value))
             n_prefs_set += 1
 
         # 섭취 이력 등록 — timestamp를 UTC 기준 naive datetime으로 정규화
