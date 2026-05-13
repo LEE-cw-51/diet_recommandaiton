@@ -89,18 +89,16 @@ class DailyExp3Problem(BaseDailyDietProblem):
         f3 = abs(avg_price - self.price_per_meal_star) / self.price_per_meal_star
 
         # f4: KG 오차율 = (max_score - avg_score) / max_score  ∈ [0, 1]
+        # 당일 중복 메뉴는 get_batch_diet_score 내부에서 D_dup=1.0 강제 → S=0 페널티 적용.
         max_s = self.kg_manager.max_possible_score(self.user_id)
-        max_s = max(1e-9, max_s)  # ZeroDivisionError 방어
-        scores = [
-            self.kg_manager.get_score(
-                self.user_id,
-                make_menu_id(item),  # kg_manager.make_menu_id()와 동일 규칙으로 ID 생성
-                self.lambda_decay,
-                now=self.sim_now,   # 시뮬레이션 시 가상 시각, None이면 datetime.now()
-            )
-            for item in combo
-        ]
-        avg_score = sum(scores) / len(scores) if scores else 0.0
+        max_s = max(1e-9, max_s)  # ZeroDivisionError 방어 (max_s는 항상 ≥ 1.0이라 사실상 dead code).
+        menu_ids = [make_menu_id(item) for item in combo]
+        avg_score = self.kg_manager.get_batch_diet_score(
+            self.user_id,
+            menu_ids,
+            self.lambda_decay,
+            now=self.sim_now,
+        )
         f4 = float(np.clip((max_s - avg_score) / max_s, 0.0, 1.0))
 
         out["F"] = [f1, f2, f3, f4]
