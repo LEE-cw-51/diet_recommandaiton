@@ -5,8 +5,10 @@
 - **완료**: **프로젝트 구조 정리 + experiment/ 코드 품질 정리** ✅ (PR #3 merge)
 - **완료**: **G1/G2/G3 기술적 검증 실험 (목적함수 정확화 + 본실험)** ✅ (Session 14, PR #5 준비)
 - **완료**: **KGManager 리팩터링 — 카테고리 완전 제거, 메뉴 별점(1~5★) 기반 선호도** ✅ (Session 13)
+- **완료**: **Step 6 — cuisine_type 분류 + Cold Start 문제 해결** ✅ (Session 15)
+- **완료**: **Step 7 — 식문화별 G1/G2/G3 비교 실험 (5개 식문화 × 30회 본실험)** ✅ (Session 16)
 - **다음 작업**: PR #5 merge 후 논문 작성
-- 마지막 업데이트: 2026-05-13 (Session 14, G1/G2/G3 본실험 완료)
+- 마지막 업데이트: 2026-05-14 (Session 16, 식문화별 G1/G2/G3 본실험 완료)
 
 ## 단계별 완료 현황
 | 단계 | 내용 | 상태 | 수치 |
@@ -21,6 +23,8 @@
 | Step 2c | price 이상치 처리 (IQR Tukey's fence → SQL NULL) | ✅ | LOW 16개 + HIGH 126개 → NULL (SQL 일괄 처리) |
 | Step 3-4 | 다목적 최적화 실험 프레임워크 (NSGA-II, Exp1~2) | ✅ | GD/IGD/HV/Spread 지표 완비 |
 | **Step 5** | **KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II)** | ✅ | **30회 본실험 완료: GD=0.0120, IGD=0.0329, HV=0.0069** |
+| **Step 6** | **cuisine_type LLM 분류 + Cold Start 해결** | ✅ | **Gemini 배치 분류 2,183개 완료, f4 고정 0.25 → 동적 0.02~0.16** |
+| **Step 7** | **식문화별 G1/G2/G3 비교 실험** | ✅ | **5개 식문화 × 30회 본실험 완료** |
 
 ## Session 14 완료 내용 (2026-05-13)
 
@@ -81,7 +85,48 @@
 2. **KG 통합의 효과**: f4 차원 추가로 인해 4D 목적공간 확대, f1/f2/f3는 유지하면서 선호도 최적화
 3. **7일 시뮬레이션**: f4 고정으로 인해 동적 감쇠 효과 미측정 → 향후 개선 여지
 
-#### Phase 4: Loop B f4 고정 원인 분석 (Session 15 진행 중)
+## Session 16 완료 내용 (2026-05-14)
+
+### Step 7: 식문화별 G1/G2/G3 알고리즘 비교 실험 (`experiment/tools/run_simulation_step2_cuisine.py`)
+
+**실험 설정**: 5개 식문화 × G1/G2/G3 × Loop A(30회) + Loop B(7일), pop=200, gen=200
+
+**G1/G2 결과 (식문화 무관, 모두 동일 — KG 미사용)**:
+| 그룹 | HV | GD+ | IGD+ | 시간 |
+|------|-----|------|------|------|
+| G1 (NSGA-II, 3obj) | 3.5361±0.0012 | 0.0358 | 0.0058 | ~4.9s |
+| G2 (R-NSGA-II, 3obj) | 3.5371±0.0010 | 0.0052 | 0.0021 | ~5.9s |
+- G1 vs G2: HV p=0.0006 ✅ / GD+ p=0.0000 ✅ / IGD+ p=0.0000 ✅
+
+**G3 Loop A 결과 (식문화별 KG 차이 반영)**:
+| 식문화 | KG메뉴 | G3 HV | G3 GD+ | 시간 |
+|-------|-------|-------|-------|------|
+| 한식 | 663 | 0.0088 | 0.0194 | 15.1s |
+| 양식 | 448 | 0.0100 | 0.0097 | 10.6s |
+| 분식 | 90 | 0.0167 | 0.0169 | ~8s |
+| 중식 | 33 | 0.0060 | 0.0189 | 9.4s |
+| 일식 | 31 | 0.0181 | 0.0168 | 9.2s |
+
+**G3 Loop B 결과 (7일 KG 동적 시뮬레이션)**:
+| 식문화 | KG메뉴 | f4 평균 | 중복률 |
+|-------|-------|-------|------|
+| 한식 | 663 | **0.0414** | 0.54% |
+| 양식 | 448 | **0.0553** | 0.35% |
+| 분식 | 90 | **0.1019** | 1.72% |
+| 중식 | 33 | **0.1411** | 2.80% |
+| 일식 | 31 | **0.1434** | 4.39% |
+
+**핵심 발견**: 식문화 메뉴 수 ↑ → f4 ↓ (선호도 매칭 개선) + 중복률 ↓ (다양성 확보)
+- 한식(663개)의 f4 0.0414 vs 일식(31개)의 f4 0.1434: 식문화 데이터 충분성이 추천 품질에 직접 영향
+
+**산출물 (experiment/results/step2_cuisine/)**:
+- `{cuisine}/metrics_comparison.csv`, `{cuisine}/daily_f4_trend.csv`
+- `{cuisine}/plot_convergence.png`, `{cuisine}/plot_metrics_boxplot.png`, `{cuisine}/plot_metrics_bar.png`, `{cuisine}/plot_7days_f4.png`
+- `cuisine_summary.csv`, `plot_cuisine_f4_comparison.png`, `plot_cuisine_loop_a_summary.png`
+
+---
+
+#### Phase 4: Loop B Cold Start 문제 해결 — Session 15 완료
 
 **발견:**
 - f4 = 0.2500 고정 (7일 내내 변화 없음)
@@ -90,15 +135,52 @@
   - 매일 다른 seed로 최적화 → 대부분 선택된 메뉴는 KG에 새로운 메뉴(pref=1.0)
   - 따라서 avg_score = 1.0 고정 → f4 = (1.333 - 1.0) / 1.333 = 0.25 고정
 
-**해결책 (다음 세션에서 진행):**
-1. **LLM 기반 카테고리 태깅** (100개 메뉴 → 한식/일식/중식/양식/분식/디저트 자동 분류)
-2. **초기 KG 하이브리드 초기화** (사용자가 선호 카테고리 선택 → 해당 메뉴 전체에 초기 선호도 부여)
-3. **유저 스터디 준비** (실제 사용자 피드백을 통해 선호도 학습 후 재실험)
+**해결 완료 (Session 15):**
+
+1. **Supabase `cuisine_type` 칼럼 추가** (DDL: Supabase Dashboard SQL Editor)
+   - `ALTER TABLE food_master ADD COLUMN IF NOT EXISTS cuisine_type VARCHAR(50) DEFAULT NULL;`
+   - `CREATE INDEX IF NOT EXISTS idx_food_master_cuisine_type ON food_master (cuisine_type);`
+
+2. **LLM 배치 분류** (`pipeline/06_cuisine_classify/step0_classify_cuisine.py`)
+   - Gemini 2.5-flash-lite (3.1-flash-lite 503 폴백) → 100개씩 배치
+   - 2,183개 유가격 메뉴 분류 완료
+   - 결과: 한식 663 / 카페 525 / 양식 453 / 기타 386 / 분식 90 / 중식 33 / 일식 33
+
+3. **KGManager 확장** (`experiment/core/kg_manager.py`)
+   - `add_menu()` 시그니처: `category`, `cuisine` 파라미터 추가
+   - `set_category_preference()`: 카테고리별 대량 선호도 설정
+   - `set_cuisine_preference()`: 식문화별 대량 선호도 설정
+
+4. **simulate_kg.py 버그 수정** (`experiment/tools/simulate_kg.py`)
+   - `add_menu(mid, cat)` → `add_menu(mid, category=cat, cuisine=cuisine_val)` (positional arg 버그)
+   - `set_preference(user_id, "MAIN", weight)` → `set_category_preference(user_id, "MAIN", weight)` (메뉴 ID 혼동 버그)
+
+5. **loader.py 수정** (`experiment/core/loader.py`)
+   - `_SELECT_COLS`에 `cuisine_type` 추가 (미로딩 버그 수정)
+
+6. **Cold Start 검증 실험** (`experiment/tools/run_simulation_step1_coldstart.py`)
+   - `_build_kg_with_cuisine()`: cuisine 기반 KG 하이브리드 초기화
+   - 7일 시뮬레이션 실행 (pop=200, gen=200)
+   - 결과: f4 = 0.0192~0.0577 (동적 변화) vs 기존 0.2500 고정
+
+**본실험 결과 (Loop B, cuisine=한식, pref=1.3, pop=200, gen=200):**
+| Day | f4_before (cold start) | f4_after (hybrid init) | f1 | 중복률 |
+|-----|----------------------|----------------------|-----|------|
+| 1 | 0.2500 | **0.0192** | 0.0130 | 0% |
+| 2 | 0.2500 | **0.0577** | 0.0645 | 0% |
+| 3 | 0.2500 | **0.0385** | 0.0545 | 0% |
+| 4 | 0.2500 | **0.0577** | 0.0595 | 0% |
+| 5 | 0.2500 | **0.0385** | 0.0710 | 0% |
+| 6 | 0.2500 | **0.0497** | 0.0220 | 1.4% |
+| 7 | 0.2500 | **0.0284** | 0.0275 | 2.4% |
+
+**산출물 (experiment/results/step1_coldstart/):**
+- `daily_f4_trend_coldstart.csv`: before/after f4 비교
+- `plot_coldstart_comparison.png`: 비교 플롯 (좌: cold start, 우: hybrid init)
 
 **현재 상태:**
-- 코드 수정 완료 ✅
-- 본 실험 완료 ✅
-- **다음: PR #5 merge → LLM 태깅 스크립트 작성**
+- Cold Start 해결 완료 ✅
+- **다음: PR #5 merge → 논문 작성**
 
 ---
 

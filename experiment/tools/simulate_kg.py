@@ -178,11 +178,13 @@ def simulate(
     user_id = f"user_{persona_name}"
     for item in all_foods:
         mid = make_menu_id(item)
-        cat = item.get("category", "UNKNOWN")
+        cat = item.get("category_type", item.get("category", "UNKNOWN"))
+        cuisine = item.get("cuisine_type")
         if mid:
-            kg.add_menu(mid, cat)
-    for target, weight in persona["preferences"].items():
-        kg.set_preference(user_id, target, weight)
+            kg.add_menu(mid, category=cat, cuisine=cuisine)
+    for category_name, weight in persona["preferences"].items():
+        count = kg.set_category_preference(user_id, category_name, weight)
+        print(f"    [{category_name}] {count}개 메뉴에 선호도 {weight} 부여")
 
     # ── 프로필·참조점 ─────────────────────────────────────────────
     profile = NutritionProfile(
