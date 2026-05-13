@@ -4,24 +4,29 @@
   user : 사용자
   menu : 후보 메뉴 (product_name / menu_name)
 
-엣지 (MultiDiGraph, key로 종류 구분):
-  PREFERS (User → Menu) : 별점 기반 선호도 (weight = rating / 3.0)
-  ATE     (User → Menu) : 마지막 섭취 타임스탬프 (timestamp: datetime)
+엣지 (DiGraph, 단일 엣지 dict에 모든 속성 통합):
+  User → Menu : { 'pref': float, 'last_ate': datetime }
+    - pref     : 선호도 가중치 (별점 기반, weight = rating / 3.0). 없으면 1.0.
+    - last_ate : 마지막 섭취 타임스탬프. 없으면 ATE 이력 없음으로 간주.
 
 선호도(P_i):
   P_i = rating / 3.0  →  1★=0.33, 3★=1.0(중립), 5★=1.67
-  PREFERS 없으면 기본값 1.0 (3★ 중립과 동등)
+  엣지에 pref가 없으면 기본값 1.0 (3★ 중립과 동등)
 
-시간 감쇠(D_i):
-  D_i = e^{-λ·Δt}  (직접 ATE일 때만, Δt = 경과 일수)
-  ATE 없으면 D_i = 0
+시간 감쇠(D_time):
+  D_time = e^{-λ·Δt}  (last_ate 있을 때만, Δt = 경과 일수)
+  last_ate 없으면 D_time = 0
+
+당일 중복 페널티(D_dup) — get_batch_diet_score 한정:
+  D_dup = 1.0 if 같은 식단 리스트 안에서 이미 등장한 메뉴, 아니면 0
 
 추천 점수:
+  D_i = max(D_time, D_dup)
   Score_KG(i) = P_i × (1 - D_i)  ∈ [0, max_preference]
 
 f4 오차율:
   f4 = (max_score - avg_score) / max_score  ∈ [0, 1]
-  max_score = 최대 PREFERS 가중치 (기본 1.0 포함)
+  max_score = max([1.0] + 모든 pref 값) → 항상 ≥ 1.0
 """
 
 from __future__ import annotations
@@ -58,10 +63,10 @@ def make_menu_id(item: dict) -> str:
 
 
 class KGManager:
-    """NetworkX MultiDiGraph 기반 지식 그래프 (User ↔ Menu 관계만)."""
+    """NetworkX DiGraph 기반 지식 그래프 (User ↔ Menu, 단일 엣지)."""
 
     def __init__(self) -> None:
-        self.G: nx.MultiDiGraph = nx.MultiDiGraph()
+        self.G: nx.DiGraph = nx.DiGraph()
 
     # ------------------------------------------------------------------
     # 그래프 구성
@@ -72,7 +77,7 @@ class KGManager:
         self.G.add_node(menu_id, type="menu")
 
     def set_rating(self, user_id: str, menu_id: str, rating: int) -> None:
-        """별점(1~5)을 선호도 가중치로 변환하여 PREFERS 엣지 추가/갱신.
+        """별점(1~5)을 선호도 가중치로 변환하여 엣지 pref 속성 추가/갱신.
 
         P_i = rating / 3.0  →  1★=0.33, 3★=1.0(중립), 5★=1.67
         """
@@ -81,15 +86,16 @@ class KGManager:
         self.set_preference(user_id, menu_id, rating / 3.0)
 
     def set_preference(self, user_id: str, menu_id: str, weight: float) -> None:
-        """PREFERS 엣지 추가/갱신."""
+        """엣지 pref 속성 추가/갱신 (기존 last_ate는 보존)."""
         self.G.add_node(user_id, type="user")
-        if self.G.has_edge(user_id, menu_id, key="PREFERS"):
-            self.G[user_id][menu_id]["PREFERS"]["weight"] = float(weight)
+        self.G.add_node(menu_id, type="menu")
+        if self.G.has_edge(user_id, menu_id):
+            self.G[user_id][menu_id]["pref"] = float(weight)
         else:
-            self.G.add_edge(user_id, menu_id, key="PREFERS", weight=float(weight))
+            self.G.add_edge(user_id, menu_id, pref=float(weight))
 
     def record_eating(self, user_id: str, menu_id: str, timestamp: datetime) -> None:
-        """ATE 엣지 추가/갱신 — 더 최근 타임스탬프로 갱신.
+        """엣지 last_ate 속성 추가/갱신 — 더 최근 타임스탬프로 갱신 (기존 pref 보존).
 
         Args:
             timestamp: tz-aware인 경우 tzinfo를 제거하고 naive로 정규화.
@@ -99,11 +105,13 @@ class KGManager:
         self.G.add_node(user_id, type="user")
         self.G.add_node(menu_id, type="menu")
 
-        if self.G.has_edge(user_id, menu_id, key="ATE"):
-            existing = self.G[user_id][menu_id]["ATE"]["timestamp"]
-            self.G[user_id][menu_id]["ATE"]["timestamp"] = max(existing, timestamp)
+        if self.G.has_edge(user_id, menu_id):
+            existing = self.G[user_id][menu_id].get("last_ate")
+            self.G[user_id][menu_id]["last_ate"] = (
+                max(existing, timestamp) if existing else timestamp
+            )
         else:
-            self.G.add_edge(user_id, menu_id, key="ATE", timestamp=timestamp)
+            self.G.add_edge(user_id, menu_id, last_ate=timestamp)
 
     # ------------------------------------------------------------------
     # 점수 계산
@@ -116,7 +124,7 @@ class KGManager:
         lambda_decay: float = 0.5,
         now: datetime | None = None,
     ) -> float:
-        """추천 점수 Score_KG(i) = P_i × (1 - D_i).
+        """단일 메뉴 추천 점수 Score_KG(i) = P_i × (1 - D_time).
 
         Args:
             now: 시뮬레이션 기준 시각 (naive datetime). None이면 datetime.now().
@@ -129,30 +137,73 @@ class KGManager:
         elif now.tzinfo is not None:
             raise TypeError("get_score(now=...) expects naive datetime.")
 
-        # ── P_i: 메뉴 직접 PREFERS, 없으면 1.0 ─────────────────────────
-        preference = 1.0
-        if self.G.has_edge(user_id, menu_id, key="PREFERS"):
-            preference = float(self.G[user_id][menu_id]["PREFERS"].get("weight", 1.0))
+        edata = self.G.get_edge_data(user_id, menu_id, default={})
+        pref = float(edata.get("pref", 1.0))
+        last_ate = edata.get("last_ate")
 
-        # ── D_i: 직접 ATE일 때만 e^{-λΔt} ──────────────────────────────
         decay = 0.0
-        if self.G.has_edge(user_id, menu_id, key="ATE"):
-            ts = self.G[user_id][menu_id]["ATE"].get("timestamp")
-            if ts:
-                delta_days = max(0.0, (now - ts).total_seconds() / 86400.0)
-                decay = math.exp(-lambda_decay * delta_days)
+        if last_ate is not None:
+            delta_days = max(0.0, (now - last_ate).total_seconds() / 86400.0)
+            decay = math.exp(-lambda_decay * delta_days)
         decay = min(1.0, max(0.0, decay))
 
-        return max(0.0, preference * (1.0 - decay))
+        return max(0.0, pref * (1.0 - decay))
+
+    def get_batch_diet_score(
+        self,
+        user_id: str,
+        menu_ids: list[str],
+        lambda_decay: float = 0.5,
+        now: datetime | None = None,
+    ) -> float:
+        """하루 식단 리스트의 평균 조정 점수 mean(S_i).
+
+        중복 메뉴는 두 번째 등장부터 D_dup=1.0 강제 → S_i=0 (당일 다양성 페널티).
+        f4 = (max_score - avg) / max_score 변환은 호출 측 책임.
+
+        Args:
+            menu_ids: 식단 메뉴 ID 리스트 (순서대로 평가).
+            now: 시뮬레이션 기준 시각 (naive). None이면 datetime.now().
+
+        Returns:
+            avg_score ∈ [0, max_preference].
+        """
+        if not menu_ids:
+            return 0.0
+        if now is None:
+            now = datetime.now()
+        elif now.tzinfo is not None:
+            raise TypeError("get_batch_diet_score(now=...) expects naive datetime.")
+
+        seen: set[str] = set()
+        total = 0.0
+        for mid in menu_ids:
+            edata = self.G.get_edge_data(user_id, mid, default={})
+            pref = float(edata.get("pref", 1.0))
+
+            if mid in seen:
+                decay = 1.0
+            else:
+                last_ate = edata.get("last_ate")
+                if last_ate is not None:
+                    delta_days = max(0.0, (now - last_ate).total_seconds() / 86400.0)
+                    decay = min(1.0, math.exp(-lambda_decay * delta_days))
+                else:
+                    decay = 0.0
+
+            seen.add(mid)
+            total += max(0.0, pref * (1.0 - decay))
+
+        return total / len(menu_ids)
 
     def max_possible_score(self, user_id: str) -> float:
-        """이론상 최대 추천 점수 = 최대 PREFERS 가중치 (기본 1.0 포함)."""
-        weights: list[float] = [1.0]
+        """이론상 최대 추천 점수 = max([1.0] + 모든 pref 값). 항상 ≥ 1.0."""
         if not self.G.has_node(user_id):
             return 1.0
-        for _, _, key, edata in self.G.out_edges(user_id, keys=True, data=True):
-            if key == "PREFERS":
-                weights.append(float(edata.get("weight", 1.0)))
+        weights: list[float] = [1.0]
+        for _, _, data in self.G.out_edges(user_id, data=True):
+            if "pref" in data:
+                weights.append(float(data["pref"]))
         return max(weights)
 
     # ------------------------------------------------------------------
