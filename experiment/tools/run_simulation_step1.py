@@ -79,9 +79,11 @@ KG_HISTORY     = [
 ]
 
 # ── R-NSGA-II 참조점 — 반드시 2D numpy array (shape: n_ref × n_obj) ─────────
-# 1D 배열([0,0,0,0])을 넘기면 pymoo 내부 shape 오류 발생.
-_REF_G2 = np.array([[0.0, 0.0, 0.0, 0.0]])                          # G2: 단일점
-_REF_G3 = np.array([[0.0, 0.0, 0.0, 0.0], [0.1, 0.1, 0.1, 0.0]])   # G3: 두 참조점
+# 1D 배열을 넘기면 pymoo 내부 shape 오류 발생.
+# G2는 3목적(f1, f2, f3) — KG 미포함, R-NSGA-II 알고리즘 순효과 검증용
+# G3는 4목적(f1, f2, f3, f4) — KG 통합, 본 제안 모델
+_REF_G2 = np.array([[0.0, 0.0, 0.0]])                               # G2: 3D 단일점
+_REF_G3 = np.array([[0.0, 0.0, 0.0, 0.0], [0.1, 0.1, 0.1, 0.0]])    # G3: 4D 두 참조점
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -240,8 +242,10 @@ def run_loop_a(
         for g in ("G1", "G2", "G3")
     }
 
-    # Problem은 Loop A 전체에서 하나 — KG는 record_eating 미호출이므로 stateless
-    problem = DailyExp3Problem(
+    # G1/G2: 3목적 (f1, f2, f3) — KG 미포함
+    # G3:    4목적 (f1, f2, f3, f4) — KG 통합
+    # 두 problem 모두 KG는 record_eating 미호출이므로 stateless.
+    problem_3obj = DailyExp3Problem(
         mains=mains, sides_soup=sides_soup,
         drinks=drinks, snacks=snacks,
         n_meals=N_MEALS, include_snack=False,
@@ -250,19 +254,31 @@ def run_loop_a(
         kg_manager=kg_base,
         user_id=TEST_USER,
         lambda_decay=0.5,
+        use_f4=False,
+    )
+    problem_4obj = DailyExp3Problem(
+        mains=mains, sides_soup=sides_soup,
+        drinks=drinks, snacks=snacks,
+        n_meals=N_MEALS, include_snack=False,
+        cal_star=cal_star, price_per_meal_star=price_star,
+        profile=profile,
+        kg_manager=kg_base,
+        user_id=TEST_USER,
+        lambda_decay=0.5,
+        use_f4=True,
     )
 
     algo_defs = [
-        ("G1", lambda: _make_nsga2(pop_size)),
-        ("G2", lambda: _make_rnsga2(pop_size, _REF_G2)),
-        ("G3", lambda: _make_rnsga2(pop_size, _REF_G3)),
+        ("G1", problem_3obj, lambda: _make_nsga2(pop_size)),
+        ("G2", problem_3obj, lambda: _make_rnsga2(pop_size, _REF_G2)),
+        ("G3", problem_4obj, lambda: _make_rnsga2(pop_size, _REF_G3)),
     ]
 
     for run_idx in range(n_runs):
         seed = SEED_START + run_idx
         print(f"  [Loop A] Run {run_idx + 1:2d}/{n_runs}  seed={seed}")
-        for gname, algo_fn in algo_defs:
-            F, elapsed, snaps = _run_once(problem, algo_fn(), n_gen, seed)
+        for gname, prob, algo_fn in algo_defs:
+            F, elapsed, snaps = _run_once(prob, algo_fn(), n_gen, seed)
             groups[gname]["F_list"].append(F)
             groups[gname]["times"].append(elapsed)
             groups[gname]["snapshots_all"].append(snaps)
@@ -277,14 +293,20 @@ def run_loop_a(
 
 def compute_loop_a_metrics(
     groups: dict[str, dict],
-    ref_front: np.ndarray,
-    nadir: np.ndarray,
+    ref_map: dict[str, np.ndarray],
+    nadir_map: dict[str, np.ndarray],
 ) -> dict[str, dict]:
-    """각 그룹의 n_runs회 HV, GD+, IGD+ 산출."""
+    """각 그룹의 n_runs회 HV, GD+, IGD+ 산출.
+
+    ref_map / nadir_map: 그룹별 reference front / nadir
+    (G1/G2는 3D, G3는 4D — 차원이 다르므로 그룹마다 분리).
+    """
     from experiment.core.metrics import compute_indicators
 
     result: dict[str, dict] = {}
     for gname, gdata in groups.items():
+        ref_front = ref_map[gname]
+        nadir     = nadir_map[gname]
         hv_vals, gdp_vals, igdp_vals = [], [], []
         for F in gdata["F_list"]:
             if len(F) == 0:
@@ -310,23 +332,28 @@ def compute_loop_a_metrics(
 # ──────────────────────────────────────────────────────────────────────────────
 
 def compute_wilcoxon(metrics: dict[str, dict]) -> dict:
-    """G1 vs G3, G2 vs G3 각 지표 비모수 검정.
+    """비모수 검정 (Wilcoxon rank-sum).
+
+    - G1 vs G2 (둘 다 3D): R-NSGA-II 알고리즘 순효과 검증
+    - G1 vs G3, G2 vs G3 (차원 다름): 직접 비교 의미 약하나 참고용 산출
+      (HV는 4D vs 3D 부피 단위 다름 — 해석 시 주의 필요)
 
     Returns:
-        {(base_group, "G3", metric_label): p_value}
+        {(base_group, target_group, metric_label): p_value}
     """
     from scipy.stats import ranksums
 
     p_vals: dict[tuple, float] = {}
-    for base in ("G1", "G2"):
+    pairs = [("G1", "G2"), ("G1", "G3"), ("G2", "G3")]
+    for base, target in pairs:
         for metric_key, label in [("hv", "HV"), ("gdp", "GD+"), ("igdp", "IGD+")]:
-            a = [x for x in metrics[base][metric_key] if not np.isnan(x)]
-            b = [x for x in metrics["G3"][metric_key]  if not np.isnan(x)]
+            a = [x for x in metrics[base][metric_key]   if not np.isnan(x)]
+            b = [x for x in metrics[target][metric_key] if not np.isnan(x)]
             if len(a) >= 3 and len(b) >= 3:
                 _, p = ranksums(a, b)
-                p_vals[(base, "G3", label)] = float(p)
+                p_vals[(base, target, label)] = float(p)
             else:
-                p_vals[(base, "G3", label)] = np.nan
+                p_vals[(base, target, label)] = np.nan
     return p_vals
 
 
@@ -362,10 +389,18 @@ def run_loop_b(
 
     daily_logs: list[dict] = []
     menu_history: list[str] = []        # 누적 메뉴 목록 (중복률 계산용)
+    prev_combo = None                   # 전날 선택 메뉴 (다음 day에 record_eating)
 
     for day in range(1, n_days + 1):
         today = base_date + timedelta(days=day - 1)
         seed  = SEED_START + day
+
+        # ★ 전날 선택 메뉴를 오늘 기록 (1일 경과로 decay 효과 발생)
+        if prev_combo is not None:
+            for item in prev_combo:
+                mid = make_menu_id(item)
+                if mid:
+                    kg.record_eating(TEST_USER, mid, today)
 
         problem = DailyExp3Problem(
             mains=mains, sides_soup=sides_soup,
@@ -388,6 +423,7 @@ def run_loop_b(
                 "menu_names": [], "categories": [], "duplication_rate": np.nan,
             })
             print(f"  [Loop B] Day {day}: ⚠ 실행 가능한 해 없음")
+            prev_combo = None
             continue
 
         combo      = problem.decode(best_X)
@@ -398,17 +434,34 @@ def run_loop_b(
         categories = [item.get("category", "UNKNOWN") for item in combo]
         f1, f2, f3, f4 = best_F
 
-        # ATE 엣지 업데이트 — 다음 날 최적화에 즉시 반영 (KG 동적 학습)
-        for item in combo:
-            mid = make_menu_id(item)
-            if mid:
-                kg.record_eating(TEST_USER, mid, today)
+        # ★ 오늘 선택을 내일을 위해 저장 (내일 record_eating 호출)
+        prev_combo = combo
 
         # 누적 중복률 계산
         menu_history.extend(menu_names)
         cnt = Counter(menu_history)
         repeated = sum(v - 1 for v in cnt.values() if v > 1)
         dup_rate = repeated / len(menu_history) if menu_history else 0.0
+
+        # KG 점수 상세 정보
+        from experiment.core.kg_manager import make_menu_id
+        menu_ids_today = [make_menu_id(item) for item in combo if make_menu_id(item)]
+        kg_scores = []
+        for mid in menu_ids_today:
+            edata = kg.G.get_edge_data(TEST_USER, mid, default={})
+            pref = float(edata.get("pref", 1.0))
+            last_ate = edata.get("last_ate")
+            if last_ate is not None:
+                import math
+                delta_days = max(0.0, (today - last_ate).total_seconds() / 86400.0)
+                decay = min(1.0, math.exp(-0.5 * delta_days))
+            else:
+                decay = 0.0
+            score = pref * (1 - decay)
+            kg_scores.append(score)
+
+        avg_kg = float(np.mean(kg_scores)) if kg_scores else 0.0
+        max_s = kg.max_possible_score(TEST_USER)
 
         daily_logs.append({
             "day": day, "date": today.strftime("%Y-%m-%d"),
@@ -417,8 +470,10 @@ def run_loop_b(
             "menu_names": menu_names, "categories": categories,
             "duplication_rate": float(dup_rate),
         })
+
         print(f"  [Loop B] Day {day} ({today.strftime('%m-%d')}): "
-              f"f4={f4:.4f}  f1={f1:.4f}  중복률={dup_rate:.1%}")
+              f"f4={f4:.4f}  f1={f1:.4f}  중복률={dup_rate:.1%}  "
+              f"avg_kg={avg_kg:.3f}  max_s={max_s:.3f}  menus={len(menu_ids_today)}")
 
     return daily_logs
 
@@ -496,33 +551,35 @@ def save_daily_csvs(out_dir: Path, daily_logs: list[dict]) -> None:
 
 _GROUP_COLORS = {"G1": "#e74c3c", "G2": "#2980b9", "G3": "#27ae60"}
 _GROUP_LABELS = {
-    "G1": "G1: NSGA-II",
-    "G2": "G2: R-NSGA-II (fixed KG)",
-    "G3": "G3: R-NSGA-II + Dynamic KG (Proposed)",
+    "G1": "G1: NSGA-II (3-obj, no KG)",
+    "G2": "G2: R-NSGA-II (3-obj, no KG)",
+    "G3": "G3: R-NSGA-II + KG (4-obj, Proposed)",
 }
 
 
 def plot_convergence(
     out_dir: Path,
     groups: dict[str, dict],
-    nadir: np.ndarray,
+    nadir_map: dict[str, np.ndarray],
     n_gen: int,
 ) -> None:
     """세대별 HV 수렴 곡선 (HV_SAMPLE_EVERY 간격, 30회 평균 ± 표준편차).
 
     F 스냅샷에 Nadir을 적용해 후처리 계산 → 4D HV 반복 호출 최소화.
+    그룹별 nadir이 달라(3D vs 4D), HV 값의 절대치는 그룹 간 비교 불가 — 각자 수렴 형태만 비교.
     """
     if not HAS_MPL:
         return
 
     from pymoo.indicators.hv import HV
 
-    hv_ind    = HV(ref_point=nadir)
+    hv_inds   = {g: HV(ref_point=nadir_map[g]) for g in groups.keys()}
     gen_ticks = list(range(HV_SAMPLE_EVERY, n_gen + 1, HV_SAMPLE_EVERY))
 
     fig, ax = plt.subplots(figsize=(9, 5))
 
     for gname, gdata in groups.items():
+        hv_ind = hv_inds[gname]
         gen_hv: dict[int, list[float]] = {g: [] for g in gen_ticks}
         for snaps in gdata["snapshots_all"]:
             snap_dict = dict(snaps)
@@ -822,15 +879,24 @@ def print_summary(metrics: dict[str, dict], p_vals: dict) -> None:
             f"  IGD+={np.nanmean(g['igdp']):.4f}"
             f"  time={np.nanmean(g['times']):.2f}s"
         )
-    print("\n  📈 Wilcoxon rank-sum test (vs G3)")
+    print("\n  📈 Wilcoxon rank-sum test")
+    print("    [G1 vs G2] R-NSGA-II 알고리즘 순효과 (둘 다 3D, 직접 비교 가능)")
+    for label in ("HV", "GD+", "IGD+"):
+        p = p_vals.get(("G1", "G2", label), np.nan)
+        if np.isnan(p):
+            print(f"      G1 vs G2 [{label}]: p=nan")
+        else:
+            sig = "✅ p<0.05" if p < 0.05 else "❌ n.s."
+            print(f"      G1 vs G2 [{label}]: p={p:.4f}  {sig}")
+    print("    [vs G3] 차원 다름(3D↔4D) — HV 절대값 비교는 단위 다름 caveat")
     for base in ("G1", "G2"):
         for label in ("HV", "GD+", "IGD+"):
             p = p_vals.get((base, "G3", label), np.nan)
             if np.isnan(p):
-                print(f"    {base} vs G3 [{label}]: p=nan")
+                print(f"      {base} vs G3 [{label}]: p=nan")
             else:
                 sig = "✅ p<0.05" if p < 0.05 else "❌ n.s."
-                print(f"    {base} vs G3 [{label}]: p={p:.4f}  {sig}")
+                print(f"      {base} vs G3 [{label}]: p={p:.4f}  {sig}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -897,25 +963,35 @@ def main() -> None:
         args.n_runs, args.pop_size, args.n_gen,
     )
 
-    # ── Reference Front & Nadir (동적 계산) ───────────────────────────────
-    print("\n  📐 Reference Front 계산 (G1+G2+G3 합병 → 비지배 해 추출)")
+    # ── Reference Front & Nadir (그룹별 분리 — G1/G2는 3D, G3는 4D) ───────
+    print("\n  📐 Reference Front 계산 (G1+G2 합병 3D / G3 단독 4D)")
     from experiment.core.metrics import compute_reference_pf
 
-    all_F_list = [F for g in groups.values() for F in g["F_list"] if len(F) > 0]
-    if not all_F_list:
+    # G1+G2: 3D ref_front (R-NSGA-II 순효과 비교용)
+    F_3d_list = [F for g in ("G1", "G2") for F in groups[g]["F_list"] if len(F) > 0]
+    # G3: 4D ref_front (KG 통합 모델 단독 평가)
+    F_4d_list = [F for F in groups["G3"]["F_list"] if len(F) > 0]
+    if not F_3d_list or not F_4d_list:
         print("⚠ 유효한 해 없음. 프로그램 종료.")
         return
 
-    all_F     = np.vstack(all_F_list)
-    ref_front = compute_reference_pf(all_F)
-    # Nadir Point: 고정값 금지 — f1·f3은 이론상 1 초과 가능하므로 동적 계산
-    nadir = all_F.max(axis=0) * 1.1
-    print(f"  ref_front 크기: {len(ref_front)}해")
-    print(f"  nadir: {np.round(nadir, 3)}")
+    all_F_3d  = np.vstack(F_3d_list)
+    ref_3d    = compute_reference_pf(all_F_3d)
+    nadir_3d  = all_F_3d.max(axis=0) * 1.1
+
+    all_F_4d  = np.vstack(F_4d_list)
+    ref_4d    = compute_reference_pf(all_F_4d)
+    nadir_4d  = all_F_4d.max(axis=0) * 1.1
+
+    ref_map   = {"G1": ref_3d,   "G2": ref_3d,   "G3": ref_4d}
+    nadir_map = {"G1": nadir_3d, "G2": nadir_3d, "G3": nadir_4d}
+
+    print(f"  ref_3d (G1/G2) 크기: {len(ref_3d)}해 / nadir_3d: {np.round(nadir_3d, 3)}")
+    print(f"  ref_4d (G3)    크기: {len(ref_4d)}해 / nadir_4d: {np.round(nadir_4d, 3)}")
 
     # ── 지표 계산 & Wilcoxon ───────────────────────────────────────────────
     print("\n  📊 GD+/IGD+/HV 계산 + Wilcoxon rank-sum test")
-    metrics = compute_loop_a_metrics(groups, ref_front, nadir)
+    metrics = compute_loop_a_metrics(groups, ref_map, nadir_map)
     p_vals  = compute_wilcoxon(metrics)
     print_summary(metrics, p_vals)
 
@@ -926,7 +1002,7 @@ def main() -> None:
     # ── 시각화 ────────────────────────────────────────────────────────────
     if HAS_MPL:
         print("\n  🖼  그래프 생성")
-        plot_convergence(_OUT_DIR, groups, nadir, args.n_gen)
+        plot_convergence(_OUT_DIR, groups, nadir_map, args.n_gen)
         plot_metrics_boxplot(_OUT_DIR, metrics, p_vals)
         plot_metrics_bar(_OUT_DIR, metrics, p_vals)
 
