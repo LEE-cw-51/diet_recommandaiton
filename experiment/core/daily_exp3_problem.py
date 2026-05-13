@@ -1,10 +1,10 @@
-"""DailyExp3Problem — 하루 식사 4목적 최적화 (KG 기반 개인화 추가).
+"""DailyExp3Problem — 하루 식사 3/4목적 최적화 (KG 기반 개인화 토글).
 
 목적함수:
   f1 = |총칼로리(x) - Cal*| / Cal*
   f2 = sqrt((r_C-r_C*)^2 + (r_P-r_P*)^2 + (r_F-r_F*)^2)
   f3 = |끼니당평균가격(x) - Price_per_meal*| / Price_per_meal*
-  f4 = (max_score - avg_score) / max_score   ← KG 오차율, 0에 수렴할수록 좋음
+  f4 = (max_score - avg_score) / max_score   ← KG 오차율 (use_f4=True 시에만 출력)
 
   max_score : 사용자의 최대 PREFERS 가중치 (감쇠 없음 기준)
   avg_score : 하루 식단 아이템별 KG 추천 점수의 평균
@@ -12,9 +12,9 @@
 제약조건:
   g1 ≤ 0: allergen 안전 (데이터 로딩 시 사전 필터링 완료 → 항상 -1.0)
 
-[DailyExp2와의 차이]
-  DailyExp2: 3목적 (f1, f2, f3)
-  DailyExp3: 4목적 — f4(KG 기반 개인화 오차율) 추가, R-NSGA-II로 탐색
+[모드]
+  use_f4=False: 3목적 (f1, f2, f3) — G1/G2 (R-NSGA-II 순효과 검증)
+  use_f4=True : 4목적 (f1, f2, f3, f4) — G3 (KG 개인화 통합)
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from .nutrition import NutritionProfile
 
 
 class DailyExp3Problem(BaseDailyDietProblem):
-    """하루 4목적: 칼로리 오차 / 매크로 비율 / 가격 오차 / KG 개인화 오차율."""
+    """하루 3/4목적: 칼로리·매크로·가격 (+ KG 개인화 오차율, use_f4=True 시)."""
 
     def __init__(
         self,
@@ -46,6 +46,7 @@ class DailyExp3Problem(BaseDailyDietProblem):
         user_id: str = "user_0",
         lambda_decay: float = 0.5,
         sim_now: datetime | None = None,
+        use_f4: bool = True,
     ):
         super().__init__(
             mains=mains,
@@ -57,15 +58,14 @@ class DailyExp3Problem(BaseDailyDietProblem):
             cal_star=cal_star,
             price_per_meal_star=price_per_meal_star,
             profile=profile,
-            n_obj=4,
+            n_obj=4 if use_f4 else 3,
             n_constr=1,
         )
         self.kg_manager = kg_manager if kg_manager is not None else KGManager()
         self.user_id = user_id
         self.lambda_decay = lambda_decay
+        self.use_f4 = use_f4
         # 시뮬레이션용 가상 현재 시각 (반드시 naive datetime 또는 None).
-        # None이면 get_score() 내부에서 datetime.now() 사용 (실서비스 모드).
-        # tz-aware datetime을 전달하면 get_score()에서 TypeError 발생.
         self.sim_now = sim_now
 
     def _evaluate(self, x, out, *args, **kwargs):
@@ -88,17 +88,18 @@ class DailyExp3Problem(BaseDailyDietProblem):
         avg_price = t["price"] / self.n_meals
         f3 = abs(avg_price - self.price_per_meal_star) / self.price_per_meal_star
 
-        # f4: KG 오차율 = (max_score - avg_score) / max_score  ∈ [0, 1]
-        # 당일 중복 메뉴는 get_batch_diet_score 내부에서 D_dup=1.0 강제 → S=0 페널티 적용.
-        max_s = self.kg_manager.max_possible_score(self.user_id)
-        menu_ids = [make_menu_id(item) for item in combo]
-        avg_score = self.kg_manager.get_batch_diet_score(
-            self.user_id,
-            menu_ids,
-            self.lambda_decay,
-            now=self.sim_now,
-        )
-        f4 = float(np.clip((max_s - avg_score) / max_s, 0.0, 1.0))
-
-        out["F"] = [f1, f2, f3, f4]
+        if self.use_f4:
+            # f4: KG 오차율 = (max_score - avg_score) / max_score  ∈ [0, 1]
+            max_s = self.kg_manager.max_possible_score(self.user_id)
+            menu_ids = [make_menu_id(item) for item in combo]
+            avg_score = self.kg_manager.get_batch_diet_score(
+                self.user_id,
+                menu_ids,
+                self.lambda_decay,
+                now=self.sim_now,
+            )
+            f4 = float(np.clip((max_s - avg_score) / max_s, 0.0, 1.0))
+            out["F"] = [f1, f2, f3, f4]
+        else:
+            out["F"] = [f1, f2, f3]
         out["G"] = [self._allergen_g(combo)]
