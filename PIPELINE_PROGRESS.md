@@ -3,10 +3,10 @@
 ## 현재 상태
 - **완료**: Step 5 — KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II) + 7일 시뮬레이션 검증 + **30회 본실험** ✅
 - **완료**: **프로젝트 구조 정리 + experiment/ 코드 품질 정리** ✅ (PR #3 merge)
-- **완료**: **G1/G2/G3 기술적 검증 실험 + Pareto 시각화** ✅ (PR #5 오픈)
+- **완료**: **G1/G2/G3 기술적 검증 실험 (목적함수 정확화 + 본실험)** ✅ (Session 14, PR #5 준비)
 - **완료**: **KGManager 리팩터링 — 카테고리 완전 제거, 메뉴 별점(1~5★) 기반 선호도** ✅ (Session 13)
 - **다음 작업**: PR #5 merge 후 논문 작성
-- 마지막 업데이트: 2026-05-13 (Session 13 종료, KGManager 리팩터링 + 30회 재실험 완료)
+- 마지막 업데이트: 2026-05-13 (Session 14, G1/G2/G3 본실험 완료)
 
 ## 단계별 완료 현황
 | 단계 | 내용 | 상태 | 수치 |
@@ -21,6 +21,86 @@
 | Step 2c | price 이상치 처리 (IQR Tukey's fence → SQL NULL) | ✅ | LOW 16개 + HIGH 126개 → NULL (SQL 일괄 처리) |
 | Step 3-4 | 다목적 최적화 실험 프레임워크 (NSGA-II, Exp1~2) | ✅ | GD/IGD/HV/Spread 지표 완비 |
 | **Step 5** | **KG 기반 4목적 최적화 (DailyExp3 + R-NSGA-II)** | ✅ | **30회 본실험 완료: GD=0.0120, IGD=0.0329, HV=0.0069** |
+
+## Session 14 완료 내용 (2026-05-13)
+
+### PR #5: G1/G2/G3 기술적 검증 실험 — 목적함수 정확화 + 본실험 완료
+
+#### Phase 1: 코드 검증 및 목적함수 재정의
+**발견된 불일치:**
+- 설계서: G2 = R-NSGA-II + **3목적** (f1, f2, f3) — KG 미포함, R-NSGA-II 순효과 검증용
+- 코드: G2 = **4목적** (f1, f2, f3, f4) ← 불일치로 인해 G1↔G2 비교 의미 손상
+
+**수정 사항:**
+1. `experiment/core/daily_exp3_problem.py`: `use_f4` 토글 추가
+   - `use_f4=False` → 3목적 (G1, G2)
+   - `use_f4=True` → 4목적 (G3)
+
+2. `experiment/tools/run_simulation_step1.py`:
+   - 참조점 분리: `_REF_G2` (3D), `_REF_G3` (4D)
+   - problem 분리: `problem_3obj` (G1/G2), `problem_4obj` (G3)
+   - ref_front/nadir 그룹별 계산 (3D vs 4D 차원 불일치 해결)
+   - Wilcoxon 검정: **G1 vs G2** (같은 차원, 직접 비교 가능)
+
+3. `experiment/tools/plot_pareto_step1.py`:
+   - 2×3 Pareto 산점도에서 G2의 f4 관련 쌍 자동 누락
+
+#### Phase 2: 본 실험 실행 (Loop A 30회 + Loop B 7일)
+
+**Loop A 결과 (30회 독립 실행, pop=200, gen=200):**
+| 그룹 | HV | GD+ | IGD+ | 시간 | 해 개수 |
+|------|-----|------|------|------|--------|
+| G1 (NSGA-II, 3obj) | 3.1256±0.0010 | 0.1546 | 0.0036 | 4.84s | 30회 평균 44해 |
+| G2 (R-NSGA-II, 3obj) | 3.1259±0.0018 | 0.0091 | 0.0012 | 5.85s | 30회 평균 81해 |
+| G3 (R-NSGA-II+KG, 4obj) | 0.0229±0.0000 | 0.0239 | 0.0020 | 6.83s | 30회 평균 54해 |
+
+**Wilcoxon 검정 결과:**
+- **G1 vs G2** (R-NSGA-II 순효과, 3D 직접 비교):
+  - HV: p=0.0760 (n.s.) ← 거의 동등 (R-NSGA-II 알고리즘 선택의 효과 미미)
+  - GD+: p=0.0000 ✅ (G2가 유의하게 개선)
+  - IGD+: p=0.0000 ✅ (G2가 유의하게 개선)
+  - **해석**: R-NSGA-II 알고리즘 자체는 3D에서 GD+/IGD+ 지표로 측정된 내부 해의 배치를 개선하나, HV(전체 합) 관점에서는 NSGA-II와 차이 없음
+
+- **G1/G2 vs G3** (KG 통합 효과):
+  - 모든 지표에서 유의한 차이 (p<0.05)
+  - 주의: 4D vs 3D 비교이므로 HV 절대값은 단위 다름
+
+**Loop B 결과 (7일 KG 동적 시뮬레이션):**
+- f4: 0.2500 (선호 메뉴 고정, 감쇠 x)
+- f1: 0.0005~0.0046 (칼로리 오차 매우 낮음)
+- 중복률: 0% (7일 간 메뉴 중복 없음)
+
+**산출물 (experiment/results/step1/):**
+- CSV: metrics_comparison.csv, daily_f4_trend.csv, daily_duplication.csv
+- PNG: plot_convergence.png, plot_metrics_boxplot.png, plot_metrics_bar.png, plot_7days_f4.png, plot_pareto_scatter.png
+
+#### Phase 3: 논문 준비 사항
+
+**핵심 해석:**
+1. **R-NSGA-II의 역할**: GD+/IGD+ 기준으로 파레토 해의 분포를 개선하나, HV(hypercube 부피)는 NSGA-II와 유사
+2. **KG 통합의 효과**: f4 차원 추가로 인해 4D 목적공간 확대, f1/f2/f3는 유지하면서 선호도 최적화
+3. **7일 시뮬레이션**: f4 고정으로 인해 동적 감쇠 효과 미측정 → 향후 개선 여지
+
+#### Phase 4: Loop B f4 고정 원인 분석 (Session 15 진행 중)
+
+**발견:**
+- f4 = 0.2500 고정 (7일 내내 변화 없음)
+- 원인: **KG cold start 문제**
+  - TEST_USER의 KG_PREFERENCES: 비빔밥(4★), 된장찌개(3★) 만 2개
+  - 매일 다른 seed로 최적화 → 대부분 선택된 메뉴는 KG에 새로운 메뉴(pref=1.0)
+  - 따라서 avg_score = 1.0 고정 → f4 = (1.333 - 1.0) / 1.333 = 0.25 고정
+
+**해결책 (다음 세션에서 진행):**
+1. **LLM 기반 카테고리 태깅** (100개 메뉴 → 한식/일식/중식/양식/분식/디저트 자동 분류)
+2. **초기 KG 하이브리드 초기화** (사용자가 선호 카테고리 선택 → 해당 메뉴 전체에 초기 선호도 부여)
+3. **유저 스터디 준비** (실제 사용자 피드백을 통해 선호도 학습 후 재실험)
+
+**현재 상태:**
+- 코드 수정 완료 ✅
+- 본 실험 완료 ✅
+- **다음: PR #5 merge → LLM 태깅 스크립트 작성**
+
+---
 
 ## Session 11 완료 내용 (2026-05-11)
 
