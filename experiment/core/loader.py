@@ -25,7 +25,7 @@ ALLERGEN_22 = [
 ]
 
 _SELECT_COLS = (
-    "id,product_name,brand_name,category_type,"
+    "id,product_name,brand_name,category_type,cuisine_type,"
     "calories,protein,carbs,fat,sugar,sodium,price,allergens"
 )
 _NUMERIC_COLS = ["calories", "protein", "carbs", "fat", "sugar", "sodium", "price"]
