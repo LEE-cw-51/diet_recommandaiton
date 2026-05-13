@@ -91,7 +91,6 @@ class DailyExp3Problem(BaseDailyDietProblem):
         # f4: KG 오차율 = (max_score - avg_score) / max_score  ∈ [0, 1]
         # 당일 중복 메뉴는 get_batch_diet_score 내부에서 D_dup=1.0 강제 → S=0 페널티 적용.
         max_s = self.kg_manager.max_possible_score(self.user_id)
-        max_s = max(1e-9, max_s)  # ZeroDivisionError 방어 (max_s는 항상 ≥ 1.0이라 사실상 dead code).
         menu_ids = [make_menu_id(item) for item in combo]
         avg_score = self.kg_manager.get_batch_diet_score(
             self.user_id,
