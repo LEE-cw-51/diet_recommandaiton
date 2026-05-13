@@ -3,10 +3,12 @@
 run_simulation_step1.py의 _run_once / _build_kg / _make_* 를 재사용해
 5 runs(기본) 실행 후 각 알고리즘의 머지 Pareto Front를 2D 투영 scatter로 시각화.
 
-4목적(f1~f4)은 직접 시각화 불가 → 의미 있는 3쌍 2D 투영:
-  (f1 칼로리 오차) vs (f3 가격 오차)
-  (f1 칼로리 오차) vs (f4 KG 오차율)
-  (f3 가격 오차)   vs (f4 KG 오차율)
+목적함수 차원:
+  G1, G2: 3목적 (f1, f2, f3)        → f4 관련 페어에는 마커 표시 안 됨
+  G3:     4목적 (f1, f2, f3, f4)    → 6개 페어 모두 표시
+
+2×3 subplot — C(4,2)=6쌍:
+  (f1,f2) (f1,f3) (f1,f4) (f2,f3) (f2,f4) (f3,f4)
 
 사용법:
   python -X utf8 -m experiment.tools.plot_pareto_step1          # 본실행 (5 runs, ~3분)
@@ -96,15 +98,18 @@ def plot_pareto_scatter(
     fig.suptitle("Pareto Front Projection: G1 vs G2 vs G3 (All 6 Pairs)", fontsize=13)
 
     styles = {
-        "G1 (NSGA-II)":        (g1_pf,    "gray",   "x",  60, 0.7),
-        "G2 (R-NSGA-II fixed)":(g2_pf,    "#4477AA","^",  50, 0.75),
-        "G3 (Proposed)":       (g3_pf,    "#EE6677","o",  55, 0.85),
-        "Reference Front":     (ref_front, "black",  "*",  80, 1.0),
+        "G1 (NSGA-II, 3-obj)":      (g1_pf,    "gray",   "x",  60, 0.7),
+        "G2 (R-NSGA-II, 3-obj)":    (g2_pf,    "#4477AA","^",  50, 0.75),
+        "G3 (R-NSGA-II + KG, 4-obj)":(g3_pf,   "#EE6677","o",  55, 0.85),
+        "Reference Front (4D from G3)":(ref_front, "black",  "*",  80, 1.0),
     }
 
     for ax, (xi, yi, xlabel, ylabel) in zip(axes, PAIRS):
         for label, (pf, color, marker, size, alpha) in styles.items():
             if len(pf) == 0:
+                continue
+            # 그룹의 PF 차원이 인덱스(xi, yi)를 커버하지 못하면 누락 (G1/G2의 f4 페어)
+            if pf.shape[1] <= max(xi, yi):
                 continue
             ax.scatter(
                 pf[:, xi], pf[:, yi],
@@ -173,7 +178,8 @@ def main() -> None:
 
     profile = NutritionProfile.who2025()
 
-    problem = DailyExp3Problem(
+    # G1/G2: 3목적 problem / G3: 4목적 problem
+    problem_3obj = DailyExp3Problem(
         mains=mains, sides_soup=sides_soup, drinks=drinks, snacks=snacks,
         n_meals=3, include_snack=False,
         cal_star=args.cal_star, price_per_meal_star=args.price_star,
@@ -181,6 +187,17 @@ def main() -> None:
         kg_manager=kg_base,
         user_id=TEST_USER,
         lambda_decay=0.5,
+        use_f4=False,
+    )
+    problem_4obj = DailyExp3Problem(
+        mains=mains, sides_soup=sides_soup, drinks=drinks, snacks=snacks,
+        n_meals=3, include_snack=False,
+        cal_star=args.cal_star, price_per_meal_star=args.price_star,
+        profile=profile,
+        kg_manager=kg_base,
+        user_id=TEST_USER,
+        lambda_decay=0.5,
+        use_f4=True,
     )
 
     # ── G1/G2/G3 각 n_runs회 실행 → 머지 Pareto ────────────────────────────
@@ -189,39 +206,41 @@ def main() -> None:
 
     from experiment.core.metrics import compute_reference_pf
 
-    print("  [G1] NSGA-II ...")
+    print("  [G1] NSGA-II (3-obj) ...")
     g1_pf = _collect_pareto(
-        problem,
+        problem_3obj,
         lambda: _make_nsga2(pop_size),
         n_runs, n_gen,
     )
     print(f"    → {len(g1_pf)}해")
 
-    print("  [G2] R-NSGA-II (fixed KG) ...")
+    print("  [G2] R-NSGA-II (3-obj, no KG) ...")
     g2_pf = _collect_pareto(
-        problem,
+        problem_3obj,
         lambda: _make_rnsga2(pop_size, _REF_G2),
         n_runs, n_gen,
     )
     print(f"    → {len(g2_pf)}해")
 
-    print("  [G3] R-NSGA-II (dynamic KG) ...")
+    print("  [G3] R-NSGA-II + KG (4-obj) ...")
     g3_pf = _collect_pareto(
-        problem,
+        problem_4obj,
         lambda: _make_rnsga2(pop_size, _REF_G3),
         n_runs, n_gen,
     )
     print(f"    → {len(g3_pf)}해")
 
-    # ── Reference Front (G1+G2+G3 합병) ─────────────────────────────────────
-    all_parts = [pf for pf in [g1_pf, g2_pf, g3_pf] if len(pf) > 0]
-    if not all_parts:
+    # ── Reference Front (G3 4D 단독 — 차원 다른 G1/G2와 머지 불가) ─────────
+    if len(g3_pf) == 0 and len(g1_pf) == 0 and len(g2_pf) == 0:
         print("⚠ 모든 그룹에서 실행 가능한 해 없음. 종료.")
         return
 
-    all_F    = np.vstack(all_parts)
-    ref_front = compute_reference_pf(all_F)
-    print(f"\n  📐 Reference Front: {len(ref_front)}해")
+    if len(g3_pf) > 0:
+        ref_front = compute_reference_pf(g3_pf)
+        print(f"\n  📐 Reference Front (4D from G3): {len(ref_front)}해")
+    else:
+        ref_front = np.empty((0, 4))
+        print("\n  ⚠ G3 PF 없음 — Reference Front 빈 배열")
 
     # ── 시각화 ───────────────────────────────────────────────────────────────
     print("\n  🖼  그래프 생성")
