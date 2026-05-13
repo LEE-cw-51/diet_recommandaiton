@@ -72,9 +72,9 @@ class KGManager:
     # 그래프 구성
     # ------------------------------------------------------------------
 
-    def add_menu(self, menu_id: str) -> None:
-        """메뉴 노드 등록."""
-        self.G.add_node(menu_id, type="menu")
+    def add_menu(self, menu_id: str, category: str = "UNKNOWN", cuisine: str | None = None) -> None:
+        """메뉴 노드 등록. category(5-class)와 cuisine(식문화) 정보 저장."""
+        self.G.add_node(menu_id, type="menu", category=category, cuisine=cuisine)
 
     def set_rating(self, user_id: str, menu_id: str, rating: int) -> None:
         """별점(1~5)을 선호도 가중치로 변환하여 엣지 pref 속성 추가/갱신.
@@ -205,6 +205,48 @@ class KGManager:
             if "pref" in data:
                 weights.append(float(data["pref"]))
         return max(weights)
+
+    def set_category_preference(
+        self,
+        user_id: str,
+        category: str,
+        weight: float,
+        all_menus: list[str] | None = None,
+    ) -> int:
+        """카테고리(5-class)에 속한 모든 메뉴에 선호도 엣지 생성.
+
+        Returns:
+            선호도 엣지를 생성한 메뉴 개수.
+        """
+        if all_menus is None:
+            all_menus = [
+                node for node, attr in self.G.nodes(data=True)
+                if attr.get("type") == "menu" and attr.get("category") == category
+            ]
+        for menu_id in all_menus:
+            self.set_preference(user_id, menu_id, weight)
+        return len(all_menus)
+
+    def set_cuisine_preference(
+        self,
+        user_id: str,
+        cuisine: str,
+        weight: float,
+        all_menus: list[str] | None = None,
+    ) -> int:
+        """식문화(한식/일식/중식/양식/분식 등)에 속한 모든 메뉴에 선호도 엣지 생성.
+
+        Returns:
+            선호도 엣지를 생성한 메뉴 개수.
+        """
+        if all_menus is None:
+            all_menus = [
+                node for node, attr in self.G.nodes(data=True)
+                if attr.get("type") == "menu" and attr.get("cuisine") == cuisine
+            ]
+        for menu_id in all_menus:
+            self.set_preference(user_id, menu_id, weight)
+        return len(all_menus)
 
     # ------------------------------------------------------------------
     # 팩토리
