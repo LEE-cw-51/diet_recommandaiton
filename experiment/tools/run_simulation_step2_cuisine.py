@@ -59,6 +59,7 @@ from experiment.tools.run_simulation_step1 import (  # noqa: E402
     compute_loop_a_metrics,
     compute_wilcoxon,
     save_metrics_csv,
+    save_perrun_metrics_csv,
     save_daily_csvs,
     print_summary,
     plot_convergence,
@@ -418,6 +419,7 @@ def main() -> None:
         print_summary(metrics, p_vals)
 
         save_metrics_csv(out_dir, metrics, p_vals, args.n_runs)
+        save_perrun_metrics_csv(out_dir, metrics)
 
         if HAS_MPL:
             plot_convergence(out_dir, groups, nadir_map, args.n_gen)
