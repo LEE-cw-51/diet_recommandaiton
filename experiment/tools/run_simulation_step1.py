@@ -520,6 +520,35 @@ def save_metrics_csv(
     print(f"  💾 {path.name}")
 
 
+def save_perrun_metrics_csv(out_dir: Path, metrics: dict[str, dict]) -> None:
+    """per_run_metrics.csv — 각 run의 개별 HV/GD+/IGD+/time_sec 저장.
+
+    columns: group, run_idx, HV, GD+, IGD+, time_sec
+    G1/G2 (3D)와 G3 (4D) 모두 동일 포맷으로 저장.
+    """
+    path = out_dir / "per_run_metrics.csv"
+    fieldnames = ["group", "run_idx", "HV", "GD+", "IGD+", "time_sec"]
+    rows = []
+    for gname in ("G1", "G2", "G3"):
+        g = metrics[gname]
+        for i, (hv, gdp, igdp, t) in enumerate(
+            zip(g["hv"], g["gdp"], g["igdp"], g["times"])
+        ):
+            rows.append({
+                "group":    gname,
+                "run_idx":  i,
+                "HV":       f"{hv:.6f}"   if not np.isnan(hv)   else "nan",
+                "GD+":      f"{gdp:.6f}"  if not np.isnan(gdp)  else "nan",
+                "IGD+":     f"{igdp:.6f}" if not np.isnan(igdp) else "nan",
+                "time_sec": f"{t:.3f}",
+            })
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        w.writerows(rows)
+    print(f"  💾 {path.name}")
+
+
 def save_daily_csvs(out_dir: Path, daily_logs: list[dict]) -> None:
     # daily_f4_trend.csv
     f4_path = out_dir / "daily_f4_trend.csv"
@@ -998,6 +1027,7 @@ def main() -> None:
     # ── CSV 저장 ──────────────────────────────────────────────────────────
     print(f"\n  💾 CSV 저장 → {_OUT_DIR}")
     save_metrics_csv(_OUT_DIR, metrics, p_vals, args.n_runs)
+    save_perrun_metrics_csv(_OUT_DIR, metrics)
 
     # ── 시각화 ────────────────────────────────────────────────────────────
     if HAS_MPL:
