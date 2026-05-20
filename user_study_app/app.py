@@ -231,19 +231,14 @@ def main() -> None:
         horizontal=True, key="nutr_winner", label_visibility="collapsed",
     )
 
-    div_winner  = "A" if div_choice  == "식단 A" else "B"
-    nutr_winner = "A" if nutr_choice == "식단 A" else "B"
-
-    # ── Step 4: 최종 선택 ────────────────────────────────────────────────────────
-    st.divider()
-    st.subheader("4단계: 어느 식단이 자신의 선호도에 맞나요?")
+    st.markdown("**🙋 어느 식단이 자신의 선호도에 맞나요?**")
     chosen_overall = st.radio(
-        "최종 선택",
-        ["식단 A", "식단 B"],
-        horizontal=True,
-        key="overall_choice",
-        label_visibility="collapsed",
+        "선호도 비교", ["식단 A", "식단 B"],
+        horizontal=True, key="overall_choice", label_visibility="collapsed",
     )
+
+    div_winner   = "A" if div_choice     == "식단 A" else "B"
+    nutr_winner  = "A" if nutr_choice    == "식단 A" else "B"
     chosen_label = "A" if chosen_overall == "식단 A" else "B"
 
     # ── 제출 ─────────────────────────────────────────────────────────────────────
