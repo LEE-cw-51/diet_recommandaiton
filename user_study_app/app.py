@@ -275,12 +275,15 @@ def main() -> None:
         )
 
     phone_raw = st.text_input(
-        "📞 추첨용 전화번호 (선택사항)",
-        placeholder="010-1234-5678",
-        max_chars=13,
+        "📞 추첨용 전화번호 (선택사항, 숫자만)",
+        placeholder="01012345678",
+        max_chars=11,
         key="phone_input",
     )
-    phone = phone_raw.strip() if phone_raw.strip() else ""
+    phone_raw = phone_raw.strip()
+    if phone_raw and not phone_raw.isdigit():
+        st.warning("숫자만 입력해주세요.")
+    phone = phone_raw if (phone_raw.isdigit() and len(phone_raw) >= 10) else ""
 
     # ── 제출 ─────────────────────────────────────────────────────────────────────
     st.divider()
