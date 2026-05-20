@@ -1,17 +1,16 @@
-"""A/B 유저 스터디 Streamlit 앱.
+"""A/B 유저 스터디 Streamlit 앱 v2.
 
-사용자 흐름:
-  1. 선호 식문화 선택
-  2. 해당 식문화의 세트 중 하나 랜덤 배정
-  3. A / B 식단 7일치 나란히 표시
-  4. 3가지 기준 평가 (1~5점): 다양성, 영양균형 체감, 전반적 선호도
-  5. 제출 → Supabase user_study_responses 저장
+변경 사항:
+  - 연구 참여 동의서 추가 (Step 0)
+  - 모바일 최적화: 탭 + 카드형 식단 표시
+  - Likert 5점 척도 레이블 (매우 아니다 ~ 매우 그렇다)
+  - 전반적 선호도 제거 (4단계 A/B 선택과 통합)
 
 로컬 실행:
   streamlit run user_study_app/app.py
 
 배포:
-  Streamlit Community Cloud — GitHub 연결 후 Secrets에 SUPABASE_URL, SUPABASE_KEY 등록
+  Streamlit Community Cloud — Secrets에 SUPABASE_URL, SUPABASE_KEY 등록
 """
 
 from __future__ import annotations
@@ -25,10 +24,19 @@ import pandas as pd
 import streamlit as st
 
 # ── 경로 설정 ────────────────────────────────────────────────────────────────────
-# app.py 위치 기준 상위 디렉토리의 experiment/results/user_study
-_APP_DIR    = Path(__file__).parent
-_DATA_DIR   = _APP_DIR.parent / "experiment" / "results" / "user_study"
-CUISINES    = ["한식", "중식", "일식", "양식"]
+_APP_DIR  = Path(__file__).parent
+_DATA_DIR = _APP_DIR.parent / "experiment" / "results" / "user_study"
+CUISINES  = ["한식", "중식", "일식", "양식"]
+
+LIKERT = ["매우 아니다", "아니다", "보통", "그렇다", "매우 그렇다"]  # 1~5 매핑
+
+SCENARIOS = {
+    "한식": "당신은 이번 한 주를 건강하게 보내고 싶은 직장인입니다. 한식 위주의 두 가지 7일치 식단을 비교하고 더 마음에 드는 쪽을 선택해주세요.",
+    "중식": "당신은 이번 한 주를 건강하게 보내고 싶은 직장인입니다. 중식 위주의 두 가지 7일치 식단을 비교하고 더 마음에 드는 쪽을 선택해주세요.",
+    "일식": "당신은 이번 한 주를 건강하게 보내고 싶은 직장인입니다. 일식 위주의 두 가지 7일치 식단을 비교하고 더 마음에 드는 쪽을 선택해주세요.",
+    "양식": "당신은 이번 한 주를 건강하게 보내고 싶은 직장인입니다. 양식 위주의 두 가지 7일치 식단을 비교하고 더 마음에 드는 쪽을 선택해주세요.",
+}
+
 
 # ── Supabase 클라이언트 ──────────────────────────────────────────────────────────
 
@@ -48,19 +56,17 @@ def _get_supabase():
 # ── 데이터 로딩 ──────────────────────────────────────────────────────────────────
 
 def _load_set(cuisine: str, set_id: str) -> tuple[pd.DataFrame, pd.DataFrame, dict] | None:
-    """A/B CSV + meta.json 로드. 파일 없으면 None."""
     cuisine_dir = _DATA_DIR / cuisine
     try:
-        df_a  = pd.read_csv(cuisine_dir / f"{set_id}_A.csv", encoding="utf-8-sig")
-        df_b  = pd.read_csv(cuisine_dir / f"{set_id}_B.csv", encoding="utf-8-sig")
-        meta  = json.loads((cuisine_dir / f"{set_id}_meta.json").read_text(encoding="utf-8"))
+        df_a = pd.read_csv(cuisine_dir / f"{set_id}_A.csv", encoding="utf-8-sig")
+        df_b = pd.read_csv(cuisine_dir / f"{set_id}_B.csv", encoding="utf-8-sig")
+        meta = json.loads((cuisine_dir / f"{set_id}_meta.json").read_text(encoding="utf-8"))
         return df_a, df_b, meta
     except FileNotFoundError:
         return None
 
 
 def _available_sets(cuisine: str) -> list[str]:
-    """해당 식문화 디렉토리에서 사용 가능한 set ID 목록 반환."""
     cuisine_dir = _DATA_DIR / cuisine
     if not cuisine_dir.exists():
         return []
@@ -70,25 +76,34 @@ def _available_sets(cuisine: str) -> list[str]:
 
 # ── UI 컴포넌트 ──────────────────────────────────────────────────────────────────
 
-def _render_diet_table(df: pd.DataFrame, label: str) -> None:
-    """7일치 식단 테이블 렌더링."""
-    st.markdown(f"### 식단 {label}")
-    display = df[["day", "date", "breakfast", "lunch", "dinner",
-                  "total_calories", "total_price"]].copy()
-    display.columns = ["일차", "날짜", "아침", "점심", "저녁", "총칼로리(kcal)", "총가격(원)"]
-    st.dataframe(display, use_container_width=True, hide_index=True)
+def _render_diet_cards(df: pd.DataFrame) -> None:
+    """7일치 식단을 날짜별 카드(expander)로 표시 — 모바일 최적화."""
+    meal_labels = {"breakfast": "🌅 아침", "lunch": "☀️ 점심", "dinner": "🌙 저녁"}
+    for _, row in df.iterrows():
+        day   = int(row["day"])
+        date  = row["date"]
+        cal   = int(row.get("total_calories", 0))
+        price = int(row.get("total_price", 0))
+        with st.expander(f"**{day}일차** ({date})", expanded=(day == 1)):
+            for col, label in meal_labels.items():
+                menus = str(row.get(col, "")).strip()
+                if menus:
+                    st.markdown(f"{label}: {menus}")
+            st.caption(f"🔥 {cal:,} kcal  |  💰 {price:,}원")
 
 
-def _rating_row(label: str, key_a: str, key_b: str) -> tuple[int, int]:
-    """한 평가 기준에 대해 A/B 점수를 나란히 입력받는다."""
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.markdown(f"**{label}**")
-    with col2:
-        score_a = st.selectbox("식단 A", [1, 2, 3, 4, 5], key=key_a, label_visibility="collapsed")
-    with col3:
-        score_b = st.selectbox("식단 B", [1, 2, 3, 4, 5], key=key_b, label_visibility="collapsed")
-    return score_a, score_b
+def _likert_radio(question: str, key: str) -> int:
+    """Likert 5점 척도 라디오 버튼. 반환값: 1~5."""
+    st.markdown(f"**{question}**")
+    choice = st.radio(
+        label=question,
+        options=LIKERT,
+        index=2,          # 기본값: "보통"
+        horizontal=True,
+        key=key,
+        label_visibility="collapsed",
+    )
+    return LIKERT.index(choice) + 1  # 1~5
 
 
 # ── 응답 저장 ────────────────────────────────────────────────────────────────────
@@ -99,7 +114,6 @@ def _save_response(
     chosen_overall: str,
     diversity_a: int, diversity_b: int,
     nutrition_a: int, nutrition_b: int,
-    overall_a: int,   overall_b: int,
 ) -> bool:
     sb = _get_supabase()
     if sb is None:
@@ -114,8 +128,7 @@ def _save_response(
             "diversity_b":    diversity_b,
             "nutrition_a":    nutrition_a,
             "nutrition_b":    nutrition_b,
-            "overall_a":      overall_a,
-            "overall_b":      overall_b,
+            # overall_a / overall_b: NULL (4단계 A/B 선택으로 통합)
         }).execute()
         return True
     except Exception as e:
@@ -129,92 +142,122 @@ def main() -> None:
     st.set_page_config(
         page_title="식단 선호도 조사",
         page_icon="🍱",
-        layout="wide",
-    )
-
-    st.title("식단 선호도 조사")
-    st.markdown(
-        "두 가지 7일치 식단을 비교하고, 각 항목을 **1~5점**으로 평가해주세요.  \n"
-        "어느 쪽이 더 나은지 이유가 없어도 됩니다. 직관적으로 평가해 주세요."
+        layout="centered",   # 모바일 최적화
     )
 
     # ── 세션 상태 초기화 ─────────────────────────────────────────────────────────
-    if "assigned" not in st.session_state:
-        st.session_state.assigned  = False
-        st.session_state.submitted = False
+    for key, default in [("consented", False), ("assigned", False), ("submitted", False)]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+
+    # ── Step 0: 연구 참여 동의 ───────────────────────────────────────────────────
+    st.title("🍱 식단 선호도 조사")
+    st.markdown(
+        "본 조사는 **식단 추천 알고리즘 연구(졸업논문)**를 위한 유저 스터디입니다.  \n"
+        "두 가지 7일치 식단을 비교하고 평가해주시면 됩니다. **(약 3~5분 소요)**"
+    )
+
+    with st.expander("📋 연구 참여 동의서 확인 (필수)", expanded=not st.session_state.consented):
+        st.markdown("""
+**연구 제목:** 지식 그래프 기반 다목적 최적화를 활용한 개인화 식단 추천 시스템
+
+**수집 정보:** 식단 평가 점수 및 선호 식문화 (익명, 개인 식별 정보 없음)
+
+**활용 목적:** 본 졸업논문 연구에만 사용되며, 외부 공개 및 상업적 활용 없음
+
+**참여 철회:** 제출 전 언제든 브라우저를 닫으면 참여가 취소됩니다.
+        """)
+        consent = st.checkbox("위 내용을 확인하였으며, 연구 참여에 동의합니다.", key="consent_check")
+        if consent and not st.session_state.consented:
+            st.session_state.consented = True
+            st.rerun()
+
+    if not st.session_state.consented:
+        st.info("동의서에 동의하셔야 조사를 시작할 수 있습니다.")
+        st.stop()
 
     # ── Step 1: 식문화 선택 ──────────────────────────────────────────────────────
     st.divider()
     st.subheader("1단계: 선호하는 식문화를 선택해주세요")
-    cuisine = st.radio("식문화", CUISINES, horizontal=True, key="cuisine_radio")
-
-    if st.button("식단 배정받기", type="primary", disabled=st.session_state.assigned):
-        sets = _available_sets(cuisine)
-        if not sets:
-            st.error(f"'{cuisine}' 식단 데이터가 없습니다. 관리자에게 문의하세요.")
-            st.stop()
-        chosen_set = random.choice(sets)
-        result = _load_set(cuisine, chosen_set)
-        if result is None:
-            st.error("식단 파일을 불러오지 못했습니다.")
-            st.stop()
-        st.session_state.df_a      = result[0]
-        st.session_state.df_b      = result[1]
-        st.session_state.meta      = result[2]
-        st.session_state.set_id    = chosen_set
-        st.session_state.assigned  = True
-        st.rerun()
+    cuisine = st.radio("식문화", CUISINES, horizontal=True, key="cuisine_radio",
+                       disabled=st.session_state.assigned)
 
     if not st.session_state.assigned:
+        st.info(SCENARIOS.get(cuisine, ""))
+        if st.button("식단 배정받기", type="primary"):
+            sets = _available_sets(cuisine)
+            if not sets:
+                st.error(f"'{cuisine}' 식단 데이터가 없습니다. 관리자에게 문의하세요.")
+                st.stop()
+            chosen_set = random.choice(sets)
+            result = _load_set(cuisine, chosen_set)
+            if result is None:
+                st.error("식단 파일을 불러오지 못했습니다.")
+                st.stop()
+            st.session_state.df_a    = result[0]
+            st.session_state.df_b    = result[1]
+            st.session_state.meta    = result[2]
+            st.session_state.set_id  = chosen_set
+            st.session_state.cuisine = cuisine
+            st.session_state.assigned = True
+            st.rerun()
         st.stop()
 
-    # ── Step 2: 식단 표시 ────────────────────────────────────────────────────────
+    # 배정 완료 후 시나리오 표시
+    cuisine = st.session_state.cuisine
+    st.info(SCENARIOS.get(cuisine, ""))
+
+    # ── Step 2: 식단 표시 (탭 — 모바일 최적화) ───────────────────────────────────
     st.divider()
     st.subheader("2단계: 아래 두 식단을 확인해주세요")
+    st.caption("각 일차를 눌러 상세 메뉴를 확인하세요.")
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        _render_diet_table(st.session_state.df_a, "A")
-    with col_b:
-        _render_diet_table(st.session_state.df_b, "B")
+    tab_a, tab_b = st.tabs(["🍽 식단 A", "🍽 식단 B"])
+    with tab_a:
+        _render_diet_cards(st.session_state.df_a)
+    with tab_b:
+        _render_diet_cards(st.session_state.df_b)
 
-    # ── Step 3: 평가 ─────────────────────────────────────────────────────────────
+    # ── Step 3: 항목별 평가 ──────────────────────────────────────────────────────
     st.divider()
-    st.subheader("3단계: 각 항목을 평가해주세요 (1점: 매우 낮음 / 5점: 매우 높음)")
+    st.subheader("3단계: 각 식단을 평가해주세요")
+    st.caption("매우 아니다(1점) ~ 매우 그렇다(5점)")
 
-    header_cols = st.columns([2, 1, 1])
-    with header_cols[1]:
-        st.markdown("**식단 A**")
-    with header_cols[2]:
-        st.markdown("**식단 B**")
+    st.markdown("#### 🍽 식단 A")
+    div_a  = _likert_radio("🔄 7일 동안 메뉴가 다양했다",           "div_a")
+    nutr_a = _likert_radio("⚖️ 균형 잡힌 식단처럼 느껴졌다",         "nutr_a")
 
-    div_a, div_b   = _rating_row("🔄 다양성 — 7일 동안 메뉴가 얼마나 다양했나요?",
-                                  "div_a", "div_b")
-    nutr_a, nutr_b = _rating_row("⚖️ 영양균형 체감 — 균형 잡힌 식단처럼 느껴졌나요?",
-                                  "nutr_a", "nutr_b")
-    ovr_a, ovr_b   = _rating_row("❤️ 전반적 선호도 — 실제로 먹고 싶은 식단은?",
-                                  "ovr_a", "ovr_b")
+    st.markdown("#### 🍽 식단 B")
+    div_b  = _likert_radio("🔄 7일 동안 메뉴가 다양했다",           "div_b")
+    nutr_b = _likert_radio("⚖️ 균형 잡힌 식단처럼 느껴졌다",         "nutr_b")
 
+    # ── Step 4: 최종 선택 ────────────────────────────────────────────────────────
     st.divider()
     st.subheader("4단계: 전반적으로 어느 식단이 더 마음에 드나요?")
-    chosen_overall = st.radio("최종 선택", ["A", "B"], horizontal=True, key="overall_choice")
+    chosen_overall = st.radio(
+        "최종 선택",
+        ["식단 A", "식단 B"],
+        horizontal=True,
+        key="overall_choice",
+        label_visibility="collapsed",
+    )
+    chosen_label = "A" if chosen_overall == "식단 A" else "B"
 
-    # ── Step 4: 제출 ─────────────────────────────────────────────────────────────
+    # ── 제출 ─────────────────────────────────────────────────────────────────────
     st.divider()
-    if st.button("제출하기", type="primary", disabled=st.session_state.submitted):
-        ok = _save_response(
-            cuisine       = cuisine,
-            set_id        = st.session_state.set_id,
-            chosen_overall= chosen_overall,
-            diversity_a   = div_a,   diversity_b = div_b,
-            nutrition_a   = nutr_a,  nutrition_b = nutr_b,
-            overall_a     = ovr_a,   overall_b   = ovr_b,
-        )
-        if ok:
-            st.session_state.submitted = True
-            st.rerun()
-
-    if st.session_state.submitted:
+    if not st.session_state.submitted:
+        if st.button("제출하기 ✅", type="primary"):
+            ok = _save_response(
+                cuisine       = cuisine,
+                set_id        = st.session_state.set_id,
+                chosen_overall= chosen_label,
+                diversity_a   = div_a,  diversity_b = div_b,
+                nutrition_a   = nutr_a, nutrition_b = nutr_b,
+            )
+            if ok:
+                st.session_state.submitted = True
+                st.rerun()
+    else:
         st.success("응답이 저장되었습니다. 참여해 주셔서 감사합니다! 🙏")
         st.balloons()
 
