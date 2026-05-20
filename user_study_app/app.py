@@ -31,10 +31,10 @@ CUISINES  = ["한식", "중식", "일식", "양식"]
 LIKERT = ["매우 아니다", "아니다", "보통", "그렇다", "매우 그렇다"]  # 1~5 매핑
 
 SCENARIOS = {
-    "한식": "당신은 이번 한 주를 건강하게 보내고 싶은 직장인입니다. 한식 위주의 두 가지 7일치 식단을 비교하고 더 마음에 드는 쪽을 선택해주세요.",
-    "중식": "당신은 이번 한 주를 건강하게 보내고 싶은 직장인입니다. 중식 위주의 두 가지 7일치 식단을 비교하고 더 마음에 드는 쪽을 선택해주세요.",
-    "일식": "당신은 이번 한 주를 건강하게 보내고 싶은 직장인입니다. 일식 위주의 두 가지 7일치 식단을 비교하고 더 마음에 드는 쪽을 선택해주세요.",
-    "양식": "당신은 이번 한 주를 건강하게 보내고 싶은 직장인입니다. 양식 위주의 두 가지 7일치 식단을 비교하고 더 마음에 드는 쪽을 선택해주세요.",
+    "한식": "두 가지(식단 A / 식단 B) 7일치 식단을 보고 설문에 응답해주세요.",
+    "중식": "두 가지(식단 A / 식단 B) 7일치 식단을 보고 설문에 응답해주세요.",
+    "일식": "두 가지(식단 A / 식단 B) 7일치 식단을 보고 설문에 응답해주세요.",
+    "양식": "두 가지(식단 A / 식단 B) 7일치 식단을 보고 설문에 응답해주세요.",
 }
 
 
@@ -111,8 +111,8 @@ def _save_response(
     cuisine: str,
     set_id: str,
     chosen_overall: str,
-    diversity_a: int, diversity_b: int,
-    nutrition_a: int, nutrition_b: int,
+    diversity_winner: str,
+    nutrition_winner: str,
 ) -> bool:
     sb = _get_supabase()
     if sb is None:
@@ -120,14 +120,11 @@ def _save_response(
         return False
     try:
         sb.table("user_study_responses").insert({
-            "cuisine":        cuisine,
-            "set_id":         set_id,
-            "chosen_overall": chosen_overall,
-            "diversity_a":    diversity_a,
-            "diversity_b":    diversity_b,
-            "nutrition_a":    nutrition_a,
-            "nutrition_b":    nutrition_b,
-            # overall_a / overall_b: NULL (4단계 A/B 선택으로 통합)
+            "cuisine":          cuisine,
+            "set_id":           set_id,
+            "chosen_overall":   chosen_overall,
+            "diversity_winner": diversity_winner,
+            "nutrition_winner": nutrition_winner,
         }).execute()
         return True
     except Exception as e:
@@ -152,8 +149,9 @@ def main() -> None:
     # ── Step 0: 연구 참여 동의 ───────────────────────────────────────────────────
     st.title("🍱 식단 선호도 조사")
     st.markdown(
-        "본 조사는 **식단 추천 알고리즘 연구(졸업논문)**를 위한 유저 스터디입니다.  \n"
-        "두 가지 7일치 식단을 비교하고 평가해주시면 됩니다. **(약 3~5분 소요)**"
+        "본 조사는 **식단 추천 알고리즘 연구(졸업논문)**를 위한 **A/B 테스트** 설문입니다.  \n"
+        "서로 다른 알고리즘으로 생성된 두 가지 식단(식단 A / 식단 B)을 비교하고,  \n"
+        "다양성·영양균형·선호도를 평가해주세요. **(약 3~5분 소요)**"
     )
 
     with st.expander("📋 연구 참여 동의서 확인 (필수)", expanded=not st.session_state.consented):
@@ -217,29 +215,30 @@ def main() -> None:
     with tab_b:
         _render_diet_cards(st.session_state.df_b)
 
-    # ── Step 3: 항목별 평가 ──────────────────────────────────────────────────────
+    # ── Step 3: 비교 평가 ────────────────────────────────────────────────────────
     st.divider()
-    st.subheader("3단계: 각 식단을 평가해주세요")
-    st.caption("매우 아니다(1점) ~ 매우 그렇다(5점)")
+    st.subheader("3단계: 두 식단을 비교해주세요")
 
-    st.markdown("#### 🍽 식단 A")
-    div_a  = _likert_radio("🔄 7일 동안 메뉴가 다양했다",           "div_a")
-    nutr_a = _likert_radio("⚖️ 균형 잡힌 식단처럼 느껴졌다",         "nutr_a")
-
-    st.markdown("#### 🍽 식단 B")
-    div_b  = _likert_radio("🔄 7일 동안 메뉴가 다양했다",           "div_b")
-    nutr_b = _likert_radio("⚖️ 균형 잡힌 식단처럼 느껴졌다",         "nutr_b")
-
-    # ── Step 4: 최종 선택 ────────────────────────────────────────────────────────
-    st.divider()
-    st.subheader("4단계: 전반적으로 어느 식단이 더 마음에 드나요?")
-    chosen_overall = st.radio(
-        "최종 선택",
-        ["식단 A", "식단 B"],
-        horizontal=True,
-        key="overall_choice",
-        label_visibility="collapsed",
+    st.markdown("**🔄 7일 동안 어느 식단의 메뉴가 더 다양했나요?**")
+    div_choice = st.radio(
+        "다양성 비교", ["식단 A", "식단 B"],
+        horizontal=True, key="div_winner", label_visibility="collapsed",
     )
+
+    st.markdown("**⚖️ 어느 식단이 더 균형 잡혀 보였나요?**")
+    nutr_choice = st.radio(
+        "균형 비교", ["식단 A", "식단 B"],
+        horizontal=True, key="nutr_winner", label_visibility="collapsed",
+    )
+
+    st.markdown("**🙋 어느 식단이 자신의 선호도에 맞나요?**")
+    chosen_overall = st.radio(
+        "선호도 비교", ["식단 A", "식단 B"],
+        horizontal=True, key="overall_choice", label_visibility="collapsed",
+    )
+
+    div_winner   = "A" if div_choice     == "식단 A" else "B"
+    nutr_winner  = "A" if nutr_choice    == "식단 A" else "B"
     chosen_label = "A" if chosen_overall == "식단 A" else "B"
 
     # ── 제출 ─────────────────────────────────────────────────────────────────────
@@ -247,11 +246,11 @@ def main() -> None:
     if not st.session_state.submitted:
         if st.button("제출하기 ✅", type="primary"):
             ok = _save_response(
-                cuisine       = cuisine,
-                set_id        = st.session_state.set_id,
-                chosen_overall= chosen_label,
-                diversity_a   = div_a,  diversity_b = div_b,
-                nutrition_a   = nutr_a, nutrition_b = nutr_b,
+                cuisine          = cuisine,
+                set_id           = st.session_state.set_id,
+                chosen_overall   = chosen_label,
+                diversity_winner = div_winner,
+                nutrition_winner = nutr_winner,
             )
             if ok:
                 st.session_state.submitted = True
