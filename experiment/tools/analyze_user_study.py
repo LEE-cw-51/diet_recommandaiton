@@ -168,10 +168,18 @@ def main() -> None:
                         help="특정 식문화만 분석 (default: 전체)")
     parser.add_argument("--out_csv", type=str,
                         default=str(_DATA_DIR / "analysis_result.csv"))
+    parser.add_argument("--min_time", type=int, default=0,
+                        help="최소 응답 시간(초), 미만이면 제외 (default: 0, 비활성)")
     args = parser.parse_args()
 
     print("Supabase에서 응답 로딩 중...")
     raw_rows = _load_responses(cuisine_filter=args.cuisine)
+
+    if args.min_time > 0:
+        before = len(raw_rows)
+        raw_rows = [r for r in raw_rows
+                    if (r.get("response_time_seconds") or 0) >= args.min_time]
+        print(f"  응답 시간 {args.min_time}초 미만 제외: {before - len(raw_rows)}건")
     print(f"  총 {len(raw_rows)}건 로드")
 
     if not raw_rows:
