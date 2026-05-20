@@ -149,6 +149,17 @@ def main() -> None:
         layout="centered",   # 모바일 최적화
     )
 
+    # ── Streamlit 배포자 배지 숨기기 ─────────────────────────────────────────────
+    st.markdown("""
+        <style>
+        [data-testid="stAppViewerBadge"],
+        div[class*="viewerBadge"],
+        iframe[title="Streamlit App Badge"] { display: none !important; }
+        [data-testid="stHeader"] { display: none !important; }
+        footer { visibility: hidden !important; }
+        </style>
+    """, unsafe_allow_html=True)
+
     # ── 인앱 브라우저 경고 ───────────────────────────────────────────────────────
     st.warning(
         "📱 카카오톡·라인 등 **인앱 브라우저**에서 열린 경우, "
