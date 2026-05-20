@@ -1,0 +1,92 @@
+C:\Users\chanw\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymoo\algorithms\moo\rnsga2.py:183: RuntimeWarning: divide by zero encountered in divide
+  N = ((D / (nadir - ideal)) ** 2) * weights
+C:\Users\chanw\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymoo\algorithms\moo\rnsga2.py:183: RuntimeWarning: invalid value encountered in divide
+  N = ((D / (nadir - ideal)) ** 2) * weights
+
+=================================================================
+  Supabase 데이터 로딩
+=================================================================
+📦 [FoodDataLoader] Supabase에서 food_master 로딩 중...
+  총 3358행 로딩 완료
+  MAIN:956  SIDE_SOUP:847  DRINK:408  SNACK:1099
+
+=================================================================
+  [한식] 5세트 생성
+=================================================================
+  [한식] set_01 생성 중...
+  [한식] 663개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_01_A.csv (G3), set_01_B.csv (G2)
+  [한식] set_02 생성 중...
+  [한식] 663개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_02_A.csv (G2), set_02_B.csv (G3)
+  [한식] set_03 생성 중...
+  [한식] 663개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_03_A.csv (G2), set_03_B.csv (G3)
+  [한식] set_04 생성 중...
+  [한식] 663개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_04_A.csv (G2), set_04_B.csv (G3)
+  [한식] set_05 생성 중...
+  [한식] 663개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_05_A.csv (G3), set_05_B.csv (G2)
+
+=================================================================
+  [중식] 5세트 생성
+=================================================================
+  [중식] set_01 생성 중...
+  [중식] 33개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_01_A.csv (G3), set_01_B.csv (G2)
+  [중식] set_02 생성 중...
+  [중식] 33개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_02_A.csv (G3), set_02_B.csv (G2)
+  [중식] set_03 생성 중...
+  [중식] 33개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_03_A.csv (G2), set_03_B.csv (G3)
+  [중식] set_04 생성 중...
+  [중식] 33개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_04_A.csv (G2), set_04_B.csv (G3)
+  [중식] set_05 생성 중...
+  [중식] 33개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_05_A.csv (G2), set_05_B.csv (G3)
+
+=================================================================
+  [일식] 5세트 생성
+=================================================================
+  [일식] set_01 생성 중...
+  [일식] 31개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_01_A.csv (G2), set_01_B.csv (G3)
+  [일식] set_02 생성 중...
+  [일식] 31개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_02_A.csv (G3), set_02_B.csv (G2)
+  [일식] set_03 생성 중...
+  [일식] 31개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_03_A.csv (G2), set_03_B.csv (G3)
+  [일식] set_04 생성 중...
+  [일식] 31개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_04_A.csv (G2), set_04_B.csv (G3)
+  [일식] set_05 생성 중...
+  [일식] 31개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_05_A.csv (G3), set_05_B.csv (G2)
+
+=================================================================
+  [양식] 5세트 생성
+=================================================================
+  [양식] set_01 생성 중...
+  [양식] 448개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_01_A.csv (G3), set_01_B.csv (G2)
+  [양식] set_02 생성 중...
+  [양식] 448개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_02_A.csv (G2), set_02_B.csv (G3)
+  [양식] set_03 생성 중...
+  [양식] 448개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_03_A.csv (G3), set_03_B.csv (G2)
+  [양식] set_04 생성 중...
+  [양식] 448개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_04_A.csv (G3), set_04_B.csv (G2)
+  [양식] set_05 생성 중...
+  [양식] 448개 메뉴에 pref=1.3 부여  (max_score=1.300)
+    -> set_05_A.csv (G2), set_05_B.csv (G3)
+
+=================================================================
+  완료: 4개 식문화 x 5세트 = 20세트
+  저장 경로: C:\Users\chanw\Desktop\diet_recommendation\.claude\worktrees\relaxed-jones-ed927c\experiment\results\user_study
+=================================================================
