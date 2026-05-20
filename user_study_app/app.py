@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -113,19 +114,26 @@ def _save_response(
     chosen_overall: str,
     diversity_winner: str,
     nutrition_winner: str,
+    response_time_seconds: int | None = None,
+    phone_number: str | None = None,
 ) -> bool:
     sb = _get_supabase()
     if sb is None:
         st.error("Supabase 연결 실패. SUPABASE_URL / SUPABASE_KEY를 확인하세요.")
         return False
     try:
-        sb.table("user_study_responses").insert({
+        data: dict = {
             "cuisine":          cuisine,
             "set_id":           set_id,
             "chosen_overall":   chosen_overall,
             "diversity_winner": diversity_winner,
             "nutrition_winner": nutrition_winner,
-        }).execute()
+        }
+        if response_time_seconds is not None:
+            data["response_time_seconds"] = response_time_seconds
+        if phone_number:
+            data["phone_number"] = phone_number.strip()
+        sb.table("user_study_responses").insert(data).execute()
         return True
     except Exception as e:
         st.error(f"저장 오류: {e}")
@@ -141,8 +149,18 @@ def main() -> None:
         layout="centered",   # 모바일 최적화
     )
 
+    # ── 인앱 브라우저 경고 ───────────────────────────────────────────────────────
+    st.warning(
+        "📱 카카오톡·라인 등 **인앱 브라우저**에서 열린 경우, "
+        "우측 상단 메뉴(···)를 눌러 **크롬 또는 사파리로 열기**를 선택해주세요.  \n"
+        "인앱 브라우저에서는 응답이 저장되지 않을 수 있습니다."
+    )
+
     # ── 세션 상태 초기화 ─────────────────────────────────────────────────────────
-    for key, default in [("consented", False), ("assigned", False), ("submitted", False)]:
+    for key, default in [
+        ("consented", False), ("assigned", False),
+        ("submitted", False), ("response_start", None),
+    ]:
         if key not in st.session_state:
             st.session_state[key] = default
 
@@ -152,6 +170,10 @@ def main() -> None:
         "본 조사는 **식단 추천 알고리즘 연구(졸업논문)**를 위한 **A/B 테스트** 설문입니다.  \n"
         "서로 다른 알고리즘으로 생성된 두 가지 식단(식단 A / 식단 B)을 비교하고,  \n"
         "다양성·영양균형·선호도를 평가해주세요. **(약 3~5분 소요)**"
+    )
+    st.info(
+        "⏰ **설문 기간:** 2026년 5월 20일(수) ~ 5월 24일(일) 23:59  \n"
+        "☕ 참여해주신 분 중 **5명을 추첨하여 메가커피 아메리카노**를 드립니다!"
     )
 
     with st.expander("📋 연구 참여 동의서 확인 (필수)", expanded=not st.session_state.consented):
@@ -194,9 +216,10 @@ def main() -> None:
             st.session_state.df_a    = result[0]
             st.session_state.df_b    = result[1]
             st.session_state.meta    = result[2]
-            st.session_state.set_id  = chosen_set
-            st.session_state.cuisine = cuisine
-            st.session_state.assigned = True
+            st.session_state.set_id         = chosen_set
+            st.session_state.cuisine        = cuisine
+            st.session_state.assigned       = True
+            st.session_state.response_start = time.time()
             st.rerun()
         st.stop()
 
@@ -241,16 +264,38 @@ def main() -> None:
     nutr_winner  = "A" if nutr_choice    == "식단 A" else "B"
     chosen_label = "A" if chosen_overall == "식단 A" else "B"
 
+    # ── 전화번호 수집 (선택) ─────────────────────────────────────────────────────
+    st.divider()
+    with st.expander("📋 개인정보 수집·이용 안내 (이벤트 참여 시)", expanded=True):
+        st.markdown(
+            "- **수집 목적:** 졸업논문 유저 스터디 이벤트 상품(기프티콘) 추첨 및 발송  \n"
+            "- **수집 항목:** 전화번호 (선택)  \n"
+            "- **보유 기간:** 기프티콘 발송 완료 후 **즉시 파기**  \n"
+            "- 미입력 시에도 설문 제출이 가능하며, 해당 응답은 이벤트 추첨 대상에서 제외됩니다."
+        )
+
+    phone_raw = st.text_input(
+        "📞 추첨용 전화번호 (선택사항)",
+        placeholder="010-1234-5678",
+        max_chars=13,
+        key="phone_input",
+    )
+    phone = phone_raw.strip() if phone_raw.strip() else ""
+
     # ── 제출 ─────────────────────────────────────────────────────────────────────
     st.divider()
     if not st.session_state.submitted:
         if st.button("제출하기 ✅", type="primary"):
+            elapsed = (int(time.time() - st.session_state.response_start)
+                       if st.session_state.response_start else None)
             ok = _save_response(
-                cuisine          = cuisine,
-                set_id           = st.session_state.set_id,
-                chosen_overall   = chosen_label,
-                diversity_winner = div_winner,
-                nutrition_winner = nutr_winner,
+                cuisine                = cuisine,
+                set_id                 = st.session_state.set_id,
+                chosen_overall         = chosen_label,
+                diversity_winner       = div_winner,
+                nutrition_winner       = nutr_winner,
+                response_time_seconds  = elapsed,
+                phone_number           = phone or None,
             )
             if ok:
                 st.session_state.submitted = True
