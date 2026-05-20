@@ -205,7 +205,7 @@ def run_loop_b_cuisine(
         for mid in menu_ids_today:
             edata    = kg.G.get_edge_data(TEST_USER, mid, default={})
             pref     = float(edata.get("pref", 1.0))
-            last_ate = edata.get("last_ate")
+            last_ate = kg._get_last_ate(TEST_USER, mid)
             if last_ate is not None:
                 delta_days = max(0.0, (today - last_ate).total_seconds() / 86400.0)
                 decay = min(1.0, math.exp(-0.5 * delta_days))

@@ -4,18 +4,22 @@
   user : 사용자
   menu : 후보 메뉴 (product_name / menu_name)
 
-엣지 (DiGraph, 단일 엣지 dict에 모든 속성 통합):
-  User → Menu : { 'pref': float, 'last_ate': datetime }
-    - pref     : 선호도 가중치 (별점 기반, weight = rating / 3.0). 없으면 1.0.
-    - last_ate : 마지막 섭취 타임스탬프. 없으면 ATE 이력 없음으로 간주.
+엣지 (DiGraph):
+  User → Menu : { 'pref': float }
+    - pref : 선호도 가중치 (별점 기반, weight = rating / 3.0). 없으면 1.0.
+
+섭취 이력 (_intake_log):
+  선호도 엣지와 독립적으로 관리되는 별도 리스트.
+  list[tuple[user_id, menu_id, datetime]]
+  record_eating() 호출 시에만 기록되며, 엣지 생성과 무관하다.
 
 선호도(P_i):
   P_i = rating / 3.0  →  1★=0.33, 3★=1.0(중립), 5★=1.67
   엣지에 pref가 없으면 기본값 1.0 (3★ 중립과 동등)
 
 시간 감쇠(D_time):
-  D_time = e^{-λ·Δt}  (last_ate 있을 때만, Δt = 경과 일수)
-  last_ate 없으면 D_time = 0
+  D_time = e^{-λ·Δt}  (_intake_log의 last_ate 있을 때만, Δt = 경과 일수)
+  섭취 이력 없으면 D_time = 0 → 선호도 점수 그대로 반영
 
 당일 중복 페널티(D_dup) — get_batch_diet_score 한정:
   D_dup = 1.0 if 같은 식단 리스트 안에서 이미 등장한 메뉴, 아니면 0
@@ -67,6 +71,7 @@ class KGManager:
 
     def __init__(self) -> None:
         self.G: nx.DiGraph = nx.DiGraph()
+        self._intake_log: list[tuple[str, str, datetime]] = []
 
     # ------------------------------------------------------------------
     # 그래프 구성
@@ -95,23 +100,19 @@ class KGManager:
             self.G.add_edge(user_id, menu_id, pref=float(weight))
 
     def record_eating(self, user_id: str, menu_id: str, timestamp: datetime) -> None:
-        """엣지 last_ate 속성 추가/갱신 — 더 최근 타임스탬프로 갱신 (기존 pref 보존).
+        """섭취 이력을 _intake_log에 추가 (선호도 엣지와 독립).
 
         Args:
             timestamp: tz-aware인 경우 tzinfo를 제거하고 naive로 정규화.
         """
         if timestamp.tzinfo is not None:
             timestamp = timestamp.replace(tzinfo=None)
-        self.G.add_node(user_id, type="user")
-        self.G.add_node(menu_id, type="menu")
+        self._intake_log.append((user_id, menu_id, timestamp))
 
-        if self.G.has_edge(user_id, menu_id):
-            existing = self.G[user_id][menu_id].get("last_ate")
-            self.G[user_id][menu_id]["last_ate"] = (
-                max(existing, timestamp) if existing else timestamp
-            )
-        else:
-            self.G.add_edge(user_id, menu_id, last_ate=timestamp)
+    def _get_last_ate(self, user_id: str, menu_id: str) -> datetime | None:
+        """_intake_log에서 해당 (user, menu) 쌍의 가장 최근 섭취 시각 반환."""
+        times = [t for u, m, t in self._intake_log if u == user_id and m == menu_id]
+        return max(times) if times else None
 
     # ------------------------------------------------------------------
     # 점수 계산
@@ -139,7 +140,7 @@ class KGManager:
 
         edata = self.G.get_edge_data(user_id, menu_id, default={})
         pref = float(edata.get("pref", 1.0))
-        last_ate = edata.get("last_ate")
+        last_ate = self._get_last_ate(user_id, menu_id)
 
         decay = 0.0
         if last_ate is not None:
@@ -184,7 +185,7 @@ class KGManager:
             if mid in seen:
                 decay = 1.0
             else:
-                last_ate = edata.get("last_ate")
+                last_ate = self._get_last_ate(user_id, mid)
                 if last_ate is not None:
                     delta_days = max(0.0, (now - last_ate).total_seconds() / 86400.0)
                     decay = min(1.0, math.exp(-lambda_decay * delta_days))
