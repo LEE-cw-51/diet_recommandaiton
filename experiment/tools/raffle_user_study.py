@@ -2,11 +2,11 @@
 
 조건:
   - phone_number 입력 O
-  - response_time_seconds >= min_time (기본 60초)
+  - response_time_seconds >= min_time (기본 30초)
 
 사용법:
   python -X utf8 -m experiment.tools.raffle_user_study
-  python -X utf8 -m experiment.tools.raffle_user_study --n_winners 5 --min_time 60
+  python -X utf8 -m experiment.tools.raffle_user_study --n_winners 5 --min_time 30
 """
 
 from __future__ import annotations
@@ -36,8 +36,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="유저 스터디 경품 추첨")
     parser.add_argument("--n_winners", type=int, default=5,
                         help="추첨 인원 (default: 5)")
-    parser.add_argument("--min_time",  type=int, default=60,
-                        help="최소 응답 시간(초), 미만이면 제외 (default: 60)")
+    parser.add_argument("--min_time",  type=int, default=30,
+                        help="최소 응답 시간(초), 미만이면 제외 (default: 30)")
     parser.add_argument("--seed",      type=int, default=None,
                         help="추첨 재현용 시드 (default: None)")
     parser.add_argument("--out_csv",   type=str,
