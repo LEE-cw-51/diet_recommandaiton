@@ -81,10 +81,9 @@ def _render_diet_cards(df: pd.DataFrame) -> None:
     meal_labels = {"breakfast": "🌅 아침", "lunch": "☀️ 점심", "dinner": "🌙 저녁"}
     for _, row in df.iterrows():
         day   = int(row["day"])
-        date  = row["date"]
         cal   = int(row.get("total_calories", 0))
         price = int(row.get("total_price", 0))
-        with st.expander(f"**{day}일차** ({date})", expanded=(day == 1)):
+        with st.expander(f"**{day}일차**", expanded=(day == 1)):
             for col, label in meal_labels.items():
                 menus = str(row.get(col, "")).strip()
                 if menus:
