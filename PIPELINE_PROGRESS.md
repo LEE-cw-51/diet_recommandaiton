@@ -7,8 +7,9 @@
 - **완료**: **KGManager 리팩터링 — 카테고리 완전 제거, 메뉴 별점(1~5★) 기반 선호도** ✅ (Session 13)
 - **완료**: **Step 6 — cuisine_type 분류 + Cold Start 문제 해결** ✅ (Session 15)
 - **완료**: **Step 7 — 식문화별 G1/G2/G3 비교 실험 (5개 식문화 × 30회 본실험)** ✅ (Session 16)
-- **다음 작업**: PR #5 merge 후 논문 작성
-- 마지막 업데이트: 2026-05-14 (Session 16, 식문화별 G1/G2/G3 본실험 완료)
+- **완료**: **A/B 유저 스터디 전체 파이프라인 구축** ✅ (Session 18, PR #11~14)
+- **다음 작업**: PR #14 merge → Streamlit Community Cloud 재배포 → 설문 링크 공유 → 응답 수집 후 analyze_user_study.py 실행
+- 마지막 업데이트: 2026-05-20 (Session 18, A/B 유저 스터디 완성)
 
 ## 단계별 완료 현황
 | 단계 | 내용 | 상태 | 수치 |
@@ -84,6 +85,53 @@
 1. **R-NSGA-II의 역할**: GD+/IGD+ 기준으로 파레토 해의 분포를 개선하나, HV(hypercube 부피)는 NSGA-II와 유사
 2. **KG 통합의 효과**: f4 차원 추가로 인해 4D 목적공간 확대, f1/f2/f3는 유지하면서 선호도 최적화
 3. **7일 시뮬레이션**: f4 고정으로 인해 동적 감쇠 효과 미측정 → 향후 개선 여지
+
+## Session 18 완료 내용 (2026-05-20)
+
+### A/B 유저 스터디 전체 파이프라인 구축
+
+**KGManager 섭취 이력 분리** (`experiment/core/kg_manager.py`)
+- `last_ate` edge 속성 완전 제거 → `_intake_log: list[tuple[str, str, datetime]]` 독립 관리
+- 선호도(pref edge) ↔ 섭취 이력(intake_log) 개념 분리 (교수님 피드백 반영)
+- `record_eating()` → log append만 / `_get_last_ate()` private 메서드로 조회
+- `get_score()`, `get_batch_diet_score()` → `_get_last_ate()` 사용으로 교체
+
+**A/B 식단 사전 생성** (`experiment/tools/generate_user_study.py`)
+- 4개 식문화 × 5세트 = **20세트 생성 완료** (pop=200, gen=200)
+- G2(use_f4=False, KG 미적용) vs G3(use_f4=True, KG 적용), 동일 seed 공정 비교
+- A/B 라벨 랜덤 배정 → meta.json에만 정답 저장 (블라인드)
+- 출력: `experiment/results/user_study/{cuisine}/set_XX_A.csv, B.csv, meta.json`
+
+**Streamlit A/B 유저 스터디 앱** (`user_study_app/app.py`)
+- Step 0: 연구 참여 동의서 (논문 심사 대응)
+- Step 1: 식문화 선택 + 랜덤 세트 배정 (5세트 중 1개)
+- Step 2: 식단 A/B 7일치 탭+카드형 표시 (모바일 최적화, 날짜 미표시)
+- Step 3: 비교 질문 3개 (A/B 선택)
+  - 🔄 어느 식단이 더 다양했나요? → `diversity_winner`
+  - ⚖️ 어느 식단이 더 균형 잡혔나요? → `nutrition_winner`
+  - 🙋 어느 식단이 선호도에 맞나요? → `chosen_overall`
+
+**Supabase 스키마 변경** (`user_study_responses` 테이블)
+- 기존 Likert 컬럼(diversity_a/b, nutrition_a/b) → 비교형 컬럼 추가
+- `ALTER TABLE user_study_responses ADD COLUMN diversity_winner text, ADD COLUMN nutrition_winner text`
+
+**분석 스크립트** (`experiment/tools/analyze_user_study.py`)
+- A/B → G2/G3 blind decode (meta.json 참조)
+- 식문화별 G3 승률(다양성/영양균형) + G3 선택률(선호도) 집계
+- 출력: `experiment/results/user_study/analysis_result.csv`
+
+**분석 스크립트 실행 방법 (설문 수집 완료 후):**
+```bash
+python -X utf8 -m experiment.tools.analyze_user_study
+```
+
+**PR 현황:**
+- PR #11 merge: KGManager + generate_user_study + 20세트 데이터
+- PR #12 merge: Streamlit 앱 v1
+- PR #13 merge: Streamlit 앱 v2 (동의서 + 모바일)
+- **PR #14 open** (`fix/app-scenario-text`): 시나리오 문구 + 비교형 3문항 + Step 통합
+
+---
 
 ## Session 16 완료 내용 (2026-05-14)
 
