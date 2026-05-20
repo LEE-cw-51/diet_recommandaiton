@@ -111,8 +111,8 @@ def _save_response(
     cuisine: str,
     set_id: str,
     chosen_overall: str,
-    diversity_a: int, diversity_b: int,
-    nutrition_a: int, nutrition_b: int,
+    diversity_winner: str,
+    nutrition_winner: str,
 ) -> bool:
     sb = _get_supabase()
     if sb is None:
@@ -120,14 +120,11 @@ def _save_response(
         return False
     try:
         sb.table("user_study_responses").insert({
-            "cuisine":        cuisine,
-            "set_id":         set_id,
-            "chosen_overall": chosen_overall,
-            "diversity_a":    diversity_a,
-            "diversity_b":    diversity_b,
-            "nutrition_a":    nutrition_a,
-            "nutrition_b":    nutrition_b,
-            # overall_a / overall_b: NULL (4단계 A/B 선택으로 통합)
+            "cuisine":          cuisine,
+            "set_id":           set_id,
+            "chosen_overall":   chosen_overall,
+            "diversity_winner": diversity_winner,
+            "nutrition_winner": nutrition_winner,
         }).execute()
         return True
     except Exception as e:
@@ -218,18 +215,24 @@ def main() -> None:
     with tab_b:
         _render_diet_cards(st.session_state.df_b)
 
-    # ── Step 3: 항목별 평가 ──────────────────────────────────────────────────────
+    # ── Step 3: 비교 평가 ────────────────────────────────────────────────────────
     st.divider()
-    st.subheader("3단계: 각 식단을 평가해주세요")
-    st.caption("매우 아니다(1점) ~ 매우 그렇다(5점)")
+    st.subheader("3단계: 두 식단을 비교해주세요")
 
-    st.markdown("#### 🍽 식단 A")
-    div_a  = _likert_radio("🔄 7일 동안 메뉴가 다양했다",           "div_a")
-    nutr_a = _likert_radio("⚖️ 균형 잡힌 식단처럼 느껴졌다",         "nutr_a")
+    st.markdown("**🔄 7일 동안 어느 식단의 메뉴가 더 다양했나요?**")
+    div_choice = st.radio(
+        "다양성 비교", ["식단 A", "식단 B"],
+        horizontal=True, key="div_winner", label_visibility="collapsed",
+    )
 
-    st.markdown("#### 🍽 식단 B")
-    div_b  = _likert_radio("🔄 7일 동안 메뉴가 다양했다",           "div_b")
-    nutr_b = _likert_radio("⚖️ 균형 잡힌 식단처럼 느껴졌다",         "nutr_b")
+    st.markdown("**⚖️ 어느 식단이 더 균형 잡혀 보였나요?**")
+    nutr_choice = st.radio(
+        "균형 비교", ["식단 A", "식단 B"],
+        horizontal=True, key="nutr_winner", label_visibility="collapsed",
+    )
+
+    div_winner  = "A" if div_choice  == "식단 A" else "B"
+    nutr_winner = "A" if nutr_choice == "식단 A" else "B"
 
     # ── Step 4: 최종 선택 ────────────────────────────────────────────────────────
     st.divider()
@@ -248,11 +251,11 @@ def main() -> None:
     if not st.session_state.submitted:
         if st.button("제출하기 ✅", type="primary"):
             ok = _save_response(
-                cuisine       = cuisine,
-                set_id        = st.session_state.set_id,
-                chosen_overall= chosen_label,
-                diversity_a   = div_a,  diversity_b = div_b,
-                nutrition_a   = nutr_a, nutrition_b = nutr_b,
+                cuisine          = cuisine,
+                set_id           = st.session_state.set_id,
+                chosen_overall   = chosen_label,
+                diversity_winner = div_winner,
+                nutrition_winner = nutr_winner,
             )
             if ok:
                 st.session_state.submitted = True
