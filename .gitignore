@@ -13,3 +13,15 @@ data/raw/search_cache/
 
 # 실험 결과 출력 (대용량 CSV, 재생성 가능)
 experiment/results/output/
+
+# 대용량 참고자료 (로컬 보관, git 제외)
+Related_Papers/
+
+# 레거시 DB / 임시 파일
+*.db
+tmp_*
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db

@@ -37,5 +37,5 @@ DDL은 Python 코드에서 직접 실행 금지 → Supabase Dashboard > SQL Edi
 
 ## 10. 패키지 / 경로 주의
 - `google-genai>=1.0.0` 사용 (`google-generativeai` deprecated)
-- `supabase/` 디렉토리가 pip `supabase` 패키지와 충돌 → Supabase 클라이언트는 `from db.client import get_client`
+- Supabase 클라이언트는 `from db.client import get_client` 사용 (과거 `supabase/` 디렉토리가 pip `supabase` 패키지와 shadowing 위험 있었으나, SQL 마이그레이션을 `migrations/`로 분리하여 해소됨)
 - `pipeline/05_augment/` 스크립트는 `sys.path.insert(0, str(Path(__file__).parent))` 필요
