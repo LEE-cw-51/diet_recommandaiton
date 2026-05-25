@@ -58,6 +58,32 @@ def get_client() -> Client:
     return _client
 
 
+_admin_client: Client | None = None
+
+
+def get_admin_client() -> Client:
+    """service_role key로 RLS 우회 클라이언트 반환 (분석/추첨 스크립트 전용).
+
+    환경 변수:
+        SUPABASE_SERVICE_KEY : service_role 키 (우선)
+        SUPABASE_KEY         : fallback
+    """
+    global _admin_client
+
+    if _admin_client is None:
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+
+        if not url or not key:
+            raise EnvironmentError(
+                "SUPABASE_URL 또는 SUPABASE_SERVICE_KEY 환경 변수가 미설정입니다."
+            )
+
+        _admin_client = create_client(url, key)
+
+    return _admin_client
+
+
 if __name__ == "__main__":
     # 연결 테스트: python -m db.client
     sb = get_client()
