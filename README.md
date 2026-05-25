@@ -25,7 +25,8 @@ diet_recommendation/
 │   └── app.py
 │
 ├── db/                        # Supabase 클라이언트 (from db.client import get_client)
-├── migrations/                # Supabase SQL 마이그레이션
+├── supabase/
+│   └── migrations/            # 현재 Supabase SQL 마이그레이션 위치 (PR #24 머지 후 `migrations/`로 변경 예정)
 ├── qa/                        # 데이터 품질 검증 스크립트
 ├── config/                    # 파이프라인 설정 (config/settings.py)
 └── data/                      # 원본·가공 데이터 (대용량 CSV는 git 제외)
