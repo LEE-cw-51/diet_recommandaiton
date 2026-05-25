@@ -26,8 +26,8 @@ _DATA_DIR = _PROJECT_ROOT / "experiment" / "results" / "user_study"
 
 
 def _load_responses() -> list[dict]:
-    from db.client import get_client
-    sb = get_client()
+    from db.client import get_admin_client
+    sb = get_admin_client()
     result = sb.table("user_study_responses").select("*").execute()
     return result.data or []
 
