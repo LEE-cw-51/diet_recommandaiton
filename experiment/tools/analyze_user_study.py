@@ -46,8 +46,8 @@ def _load_meta(cuisine: str, set_id: str) -> dict | None:
 # ── Supabase 응답 로드 ────────────────────────────────────────────────────────────
 
 def _load_responses(cuisine_filter: str | None = None) -> list[dict]:
-    from db.client import get_client
-    sb = get_client()
+    from db.client import get_admin_client
+    sb = get_admin_client()
 
     query = sb.table("user_study_responses").select("*")
     if cuisine_filter:
