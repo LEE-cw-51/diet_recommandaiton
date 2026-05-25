@@ -1,0 +1,5 @@
+﻿cuisine,n,g3_choice_rate,diversity_g3_win_rate,nutrition_g3_win_rate
+일식,5,0.6,0.4,0.6
+양식,3,1.0,0.667,1.0
+한식,13,0.538,0.385,0.538
+중식,3,0.0,0.667,0.0
