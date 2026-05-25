@@ -5,7 +5,7 @@
 > ⚠️ **이 문서는 Session 9(2026-05-03)까지의 데이터 파이프라인 연구 노트입니다.**
 > Session 10~20(실험 프레임워크 · KG 최적화 · A/B 유저 스터디)의 운영 기록과 최신 상태는
 > [PIPELINE_PROGRESS.md](PIPELINE_PROGRESS.md)를 참조하세요.
-> 아래 일부 경로(`algorithm/` 등)는 정리 과정에서 제거되었으며, 현행 코드는 `experiment/`에 있습니다.
+> 아래 일부 경로(`algorithm/` 등)는 Session 9 시점 기록 기준으로 이후 `experiment/` 중심으로 정리 예정이었으며, 현재 레포에는 일부 디렉터리가 여전히 남아 있을 수 있습니다.
 
 ---
 
