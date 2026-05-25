@@ -50,3 +50,9 @@ tqdm>=4.0.0
 # 통계 분석 및 시각화 (analyze_results.py)
 scipy>=1.0.0
 matplotlib>=3.5.0
+# 다목적 최적화 엔진 (experiment/core — NSGA-II / R-NSGA-II)
+pymoo>=0.6.0
+# 실험 설정 YAML 로딩 (experiment/config)
+pyyaml>=6.0
+# A/B 유저 스터디 앱 (user_study_app/app.py)
+streamlit>=1.30.0
