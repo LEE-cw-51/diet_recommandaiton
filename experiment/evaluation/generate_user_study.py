@@ -7,9 +7,9 @@
   - A/B 라벨은 랜덤 배정, meta.json에만 정답 저장 (블라인드)
 
 사용법:
-  python -X utf8 -m experiment.tools.generate_user_study --test
-  python -X utf8 -m experiment.tools.generate_user_study --cuisines 한식 양식 --n_sets 5
-  python -X utf8 -m experiment.tools.generate_user_study
+  python -X utf8 -m experiment.evaluation.generate_user_study --test
+  python -X utf8 -m experiment.evaluation.generate_user_study --cuisines 한식 양식 --n_sets 5
+  python -X utf8 -m experiment.evaluation.generate_user_study
 """
 
 from __future__ import annotations
@@ -30,15 +30,15 @@ from experiment import _PROJECT_ROOT
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from experiment.tools.run_simulation_step1 import (
+from experiment.models.variants import (
     N_MEALS,
     SEED_START,
-    _REF_G2,
-    _REF_G3,
+    REF_G2 as _REF_G2,
+    REF_G3 as _REF_G3,
     TEST_USER,
 )
-from experiment.tools.simulate_kg import _run_one_day
-from experiment.tools.run_simulation_step2_cuisine import _build_kg_cuisine
+from experiment.simulation.simulate_kg import _run_one_day
+from experiment.simulation.run_step2_cuisine import _build_kg_cuisine
 
 # ── 상수 ────────────────────────────────────────────────────────────────────────
 CUISINES       = ["한식", "중식", "일식", "양식"]

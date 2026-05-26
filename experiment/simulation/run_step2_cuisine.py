@@ -10,21 +10,22 @@ G1/G2/G3 구성:
 
 식문화별 KG 초기화는 G3의 f4 목적함수에만 영향.
 
-산출물: experiment/results/step2_cuisine/
+산출물 (계산 — 항상 생성): experiment/results/step2_cuisine/
   {cuisine}/metrics_comparison.csv
   {cuisine}/daily_f4_trend.csv
   {cuisine}/daily_duplication.csv
-  {cuisine}/plot_convergence.png
-  {cuisine}/plot_metrics_boxplot.png
-  {cuisine}/plot_metrics_bar.png
-  {cuisine}/plot_7days_f4.png
-  cuisine_summary.csv               (식문화별 G3 지표 요약)
-  plot_cuisine_f4_comparison.png    (5개 식문화 f4 추이 비교)
+  {cuisine}/kg_eaten_sequence.json   (Figure 3 재생용 Loop B 섭취 시퀀스)
+  cuisine_summary.csv                (식문화별 G3 지표 요약)
+
+PNG (--plot 옵션 시에만 생성, 평소엔 visualization.plot_step2 가 담당):
+  {cuisine}/plot_convergence.png · plot_metrics_boxplot.png · plot_metrics_bar.png · plot_7days_f4.png
+  plot_cuisine_f4_comparison.png · plot_cuisine_loop_a_summary.png
 
 사용법:
-  python -X utf8 -m experiment.tools.run_simulation_step2_cuisine --test
-  python -X utf8 -m experiment.tools.run_simulation_step2_cuisine --cuisines 한식 양식
-  python -X utf8 -m experiment.tools.run_simulation_step2_cuisine
+  python -X utf8 -m experiment.simulation.run_step2_cuisine --test
+  python -X utf8 -m experiment.simulation.run_step2_cuisine --cuisines 한식 양식
+  python -X utf8 -m experiment.simulation.run_step2_cuisine            # 계산만
+  python -X utf8 -m experiment.simulation.run_step2_cuisine --plot     # 계산 + PNG
 """
 
 from __future__ import annotations
@@ -53,8 +54,8 @@ try:
 except ImportError:
     HAS_MPL = False
 
-# ── step1에서 재사용 ───────────────────────────────────────────────────────────
-from experiment.tools.run_simulation_step1 import (  # noqa: E402
+# ── 계산 로직 재사용 (simulation.run_step1) ─────────────────────────────────
+from experiment.simulation.run_step1 import (  # noqa: E402
     run_loop_a,
     compute_loop_a_metrics,
     compute_wilcoxon,
@@ -62,17 +63,20 @@ from experiment.tools.run_simulation_step1 import (  # noqa: E402
     save_perrun_metrics_csv,
     save_daily_csvs,
     print_summary,
+)
+# ── 시각화 함수 재사용 (visualization.plot_step1 — 데이터 인자 직접 수용) ────
+from experiment.visualization.plot_step1 import (  # noqa: E402
     plot_convergence,
     plot_7days_f4,
     plot_metrics_boxplot,
     plot_metrics_bar,
+)
+# ── 모델 변형 상수 (models.variants 단일 출처) ──────────────────────────────
+from experiment.models.variants import (  # noqa: E402
     N_MEALS,
+    REF_G3 as _REF_G3,
     SEED_START,
-    _REF_G2,
-    _REF_G3,
     TEST_USER,
-    _GROUP_COLORS,
-    _GROUP_LABELS,
 )
 
 # ── 상수 ───────────────────────────────────────────────────────────────────────
@@ -140,7 +144,7 @@ def run_loop_b_cuisine(
 
     run_simulation_step1.run_loop_b와 동일하나, KG 초기화를 cuisine 기반으로 변경.
     """
-    from experiment.tools.simulate_kg import _run_one_day
+    from experiment.simulation.simulate_kg import _run_one_day
     from experiment.core.daily_exp3_problem import DailyExp3Problem
     from experiment.core.kg_manager import make_menu_id
     from experiment.core.nutrition import NutritionProfile
@@ -221,6 +225,7 @@ def run_loop_b_cuisine(
             "f1": float(f1), "f2": float(f2),
             "f3": float(f3), "f4": float(f4),
             "menu_names": menu_names, "categories": categories,
+            "menu_ids": menu_ids_today,
             "duplication_rate": float(dup_rate),
         })
 
@@ -234,6 +239,41 @@ def run_loop_b_cuisine(
 # ──────────────────────────────────────────────────────────────────────────────
 # 식문화간 비교 저장 / 시각화
 # ──────────────────────────────────────────────────────────────────────────────
+
+def save_kg_eaten_sequence(out_dir: Path, daily_logs: list[dict]) -> None:
+    """Loop B 일별 섭취 메뉴 시퀀스를 JSON으로 저장 (시각화 Figure 3 재생용).
+
+    plot_step2.plot_kg_visualization 이 이 파일을 재생해 Day7 KG를 재구성하므로,
+    시각화 단계에서 최적화를 재실행하지 않아도 된다.
+
+    주의: 해가 없었던 날(menu_ids 비어 있음)도 **반드시 기록**한다. 누락하면
+    시각화에서 시간 진행이 짧아져(Day7에 못 미침) decay/last_ate 기반 색·두께가
+    실제 7일 상태와 어긋난다. 빈 날은 menu_ids=[] 로 남기고, 별도 meta에
+    n_days / 마지막 날짜를 저장해 시각화가 항상 Day7 기준으로 sim_now를 잡게 한다.
+    """
+    import json
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "kg_eaten_sequence.json"
+    days = [
+        {
+            "day":      log["day"],
+            "date":     log["date"],
+            "menu_ids": log.get("menu_ids", []),  # 해 없는 날은 빈 리스트로 유지
+        }
+        for log in daily_logs
+    ]
+    payload = {
+        "meta": {
+            "n_days":    len(daily_logs),
+            "last_date": daily_logs[-1]["date"] if daily_logs else None,
+        },
+        "days": days,
+    }
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    print(f"  JSON saved: {path.name}")
+
 
 def save_cuisine_summary_csv(out_dir: Path, summary_rows: list[dict]) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -346,6 +386,8 @@ def main() -> None:
     parser.add_argument("--test",        action="store_true",
                         help="빠른 테스트 (pop=10, gen=20, runs=3, days=2)")
     parser.add_argument("--skip_loop_b", action="store_true")
+    parser.add_argument("--plot",        action="store_true",
+                        help="계산 직후 PNG 생성 (기본은 계산만, 그림은 visualization 계층 담당)")
     args = parser.parse_args()
 
     if args.test:
@@ -421,7 +463,7 @@ def main() -> None:
         save_metrics_csv(out_dir, metrics, p_vals, args.n_runs)
         save_perrun_metrics_csv(out_dir, metrics)
 
-        if HAS_MPL:
+        if args.plot and HAS_MPL:
             plot_convergence(out_dir, groups, nadir_map, args.n_gen)
             plot_metrics_boxplot(out_dir, metrics, p_vals)
             plot_metrics_bar(out_dir, metrics, p_vals)
@@ -440,7 +482,8 @@ def main() -> None:
                 cuisine=cuisine, weight=args.weight,
             )
             save_daily_csvs(out_dir, daily_logs)
-            if HAS_MPL:
+            save_kg_eaten_sequence(out_dir, daily_logs)
+            if args.plot and HAS_MPL:
                 plot_7days_f4(out_dir, daily_logs)
 
         cuisine_logs_for_plot[cuisine] = daily_logs
@@ -472,7 +515,7 @@ def main() -> None:
 
     save_cuisine_summary_csv(_OUT_DIR, all_cuisine_summaries)
 
-    if HAS_MPL:
+    if args.plot and HAS_MPL:
         if not args.skip_loop_b:
             plot_cuisine_f4_comparison(_OUT_DIR, cuisine_logs_for_plot)
         plot_cuisine_loop_a_summary(_OUT_DIR, cuisine_g3_metrics)

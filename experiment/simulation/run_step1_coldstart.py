@@ -11,9 +11,9 @@
   plot_coldstart_comparison.png : f4 추이 비교 플롯
 
 사용법:
-  python -X utf8 -m experiment.tools.run_simulation_step1_coldstart
-  python -X utf8 -m experiment.tools.run_simulation_step1_coldstart --cuisine 한식 --weight 1.3
-  python -X utf8 -m experiment.tools.run_simulation_step1_coldstart --test
+  python -X utf8 -m experiment.simulation.run_step1_coldstart
+  python -X utf8 -m experiment.simulation.run_step1_coldstart --cuisine 한식 --weight 1.3
+  python -X utf8 -m experiment.simulation.run_step1_coldstart --test
 """
 
 from __future__ import annotations
@@ -43,17 +43,19 @@ except ImportError:
 _OUT_DIR = _PROJECT_ROOT / "experiment" / "results" / "step1_coldstart"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 실험 상수 (run_simulation_step1.py와 동일 조건)
+# 실험 상수 — 재현성 상수는 models.variants 단일 출처에서 가져옴
 # ──────────────────────────────────────────────────────────────────────────────
 
-SEED_START  = 42
-N_MEALS     = 3
-TEST_USER   = "test_user_1"
-BASE_DATE   = datetime(2026, 5, 7, 12, 0, 0)
+from experiment.models.variants import (  # noqa: E402
+    N_MEALS,
+    REF_G3 as _REF_G3,
+    SEED_START,
+    TEST_USER,
+)
 
-_REF_G3 = np.array([[0.0, 0.0, 0.0, 0.0], [0.1, 0.1, 0.1, 0.0]])
+BASE_DATE = datetime(2026, 5, 7, 12, 0, 0)
 
-# 기존 coldstart 결과 (run_simulation_step1.py Loop B에서 측정)
+# 기존 coldstart 결과 (run_step1.py Loop B에서 측정)
 COLDSTART_F4 = [0.2500] * 7
 
 
@@ -106,7 +108,7 @@ def run_loop_b_coldstart(
     cuisine: str,
     weight: float,
 ) -> list[dict]:
-    from experiment.tools.simulate_kg import _run_one_day
+    from experiment.simulation.simulate_kg import _run_one_day
     from experiment.core.daily_exp3_problem import DailyExp3Problem
     from experiment.core.kg_manager import make_menu_id
     from experiment.core.nutrition import NutritionProfile

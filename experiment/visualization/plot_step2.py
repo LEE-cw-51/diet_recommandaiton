@@ -1,4 +1,4 @@
-"""plot_step2_results.py — Paper-quality 3-figure visualization
+"""plot_step2.py — 논문용 Figure 1~4 (저장된 결과만 로드, 최적화 재실행 없음).
 
 Figure 1  plot_interp1_g1_vs_g2.png
   Interpretation 1: G1 (NSGA-II) vs G2 (R-NSGA-II) algorithm effect
@@ -12,10 +12,14 @@ Figure 2  plot_interp2_g2_vs_g3.png
 
 Figure 3  plot_kg_visualization.png
   KG structure — Korean cuisine, Day 0 vs Day 7 (NetworkX radial layout)
+  ※ run_step2_cuisine 가 저장한 kg_eaten_sequence.json 을 재생(replay)해 Day7 KG 재구성.
+    최적화를 재실행하지 않는다. 시퀀스 파일이 없으면 Figure 3을 건너뛴다.
+
+데이터 출처: experiment/results/step2_cuisine/ (CSV + kg_eaten_sequence.json)
 
 Usage:
-    python -X utf8 -m experiment.tools.plot_step2_results
-    python -X utf8 -m experiment.tools.plot_step2_results --no_kg
+    python -X utf8 -m experiment.visualization.plot_step2
+    python -X utf8 -m experiment.visualization.plot_step2 --no_kg
 """
 
 from __future__ import annotations
@@ -546,13 +550,47 @@ def _draw_kg_panel(
     ax.axis("off")
 
 
+def _load_eaten_sequence(cuisine: str) -> dict | None:
+    """run_step2_cuisine 가 저장한 일별 섭취 시퀀스를 로드.
+
+    포맷: {"meta": {"n_days": int, "last_date": "YYYY-MM-DD"},
+           "days": [{"day": int, "date": "YYYY-MM-DD", "menu_ids": [str, ...]}, ...]}
+    (구버전 호환: 최상위가 list 인 경우 days 로 간주하고 meta 를 보강한다.)
+    파일이 없으면 None (Figure 3은 건너뜀 — 최적화 재실행 금지).
+    """
+    import json
+
+    path = _OUT_DIR / cuisine / "kg_eaten_sequence.json"
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as f:
+        data = json.load(f)
+
+    # 구버전(list) → 신버전({meta, days}) 정규화
+    if isinstance(data, list):
+        last_date = max((e["date"] for e in data), default=None)
+        return {"meta": {"n_days": len(data), "last_date": last_date}, "days": data}
+    return data
+
+
 def plot_kg_visualization(out_dir: Path) -> None:
-    """Korean Cuisine KG: Day 0 vs Day 7 — NetworkX radial layout."""
+    """Korean Cuisine KG: Day 0 vs Day 7 — NetworkX radial layout.
+
+    Day 7 KG는 저장된 섭취 시퀀스(kg_eaten_sequence.json)를 재생해 재구성한다.
+    최적화(optimizer)는 호출하지 않는다.
+    """
     from experiment.core.loader import FoodDataLoader
-    from experiment.core.nutrition import NutritionProfile
-    from experiment.core.daily_exp3_problem import DailyExp3Problem
-    from experiment.core.kg_manager import make_menu_id
-    from experiment.tools.simulate_kg import _run_one_day
+
+    cuisine = "한식"
+    weight  = 1.3
+
+    seq = _load_eaten_sequence(cuisine)
+    if seq is None:
+        print("  [Figure 3] kg_eaten_sequence.json 없음 — "
+              "run_step2_cuisine 를 재실행해 시퀀스를 생성하세요. Figure 3 생략.")
+        return
+    days_seq = seq["days"]
+    meta     = seq.get("meta", {})
 
     print("  [Figure 3] Loading Supabase data...")
     loader     = FoodDataLoader.from_supabase()
@@ -562,9 +600,6 @@ def plot_kg_visualization(out_dir: Path) -> None:
     drinks     = cats["DRINK"]
     snacks     = cats.get("SNACK", [])
     all_foods  = mains + sides_soup + drinks + snacks
-
-    cuisine = "한식"
-    weight  = 1.3
 
     # ── Day 0 KG ─────────────────────────────────────────────────────────────
     kg_day0 = _build_kg_cuisine_local(all_foods, cuisine, weight)
@@ -578,31 +613,26 @@ def plot_kg_visualization(out_dir: Path) -> None:
     sample_mids = random.sample(korean_mids, n_sample)
     print(f"  [Figure 3] Korean cuisine: {len(korean_mids)} menus, sampling {n_sample}")
 
-    # ── Day 7 KG — lightweight re-simulation (pop=30, gen=30) ────────────────
-    print("  [Figure 3] Rebuilding Day 7 KG state (pop=30, gen=30) ...")
-    kg_day7  = _build_kg_cuisine_local(all_foods, cuisine, weight)
-    profile  = NutritionProfile.who2025()
-
-    for day in range(1, 8):
-        today   = BASE_DATE + timedelta(days=day - 1)
-        problem = DailyExp3Problem(
-            mains=mains, sides_soup=sides_soup,
-            drinks=drinks, snacks=snacks,
-            n_meals=3, include_snack=False,
-            cal_star=2000.0, price_per_meal_star=8000.0,
-            profile=profile,
-            kg_manager=kg_day7, user_id=TEST_USER,
-            lambda_decay=0.5, sim_now=today,
+    # ── Day 7 KG — 저장된 섭취 시퀀스 재생 (최적화 재실행 없음) ───────────────
+    print("  [Figure 3] Replaying saved eaten sequence to rebuild Day 7 KG ...")
+    kg_day7 = _build_kg_cuisine_local(all_foods, cuisine, weight)
+    for entry in days_seq:
+        day_date = datetime.strptime(entry["date"], "%Y-%m-%d").replace(
+            hour=12, minute=0, second=0
         )
-        best_F, best_X = _run_one_day(problem, 30, 30, 42 + day, _REF_G3)
-        if best_X is not None:
-            combo = problem.decode(best_X)
-            for item in combo:
-                mid = make_menu_id(item)
-                if mid:
-                    kg_day7.record_eating(TEST_USER, mid, today)
+        for mid in entry.get("menu_ids", []):
+            kg_day7.record_eating(TEST_USER, mid, day_date)
 
-    sim_day7 = BASE_DATE + timedelta(days=6)
+    # sim_now 는 항상 마지막 날(Day N) 기준 — 해 없는 날이 시퀀스에 있어도
+    # 시간 진행이 짧아지지 않도록 meta.last_date / n_days 를 우선 사용한다.
+    last_date = meta.get("last_date")
+    if last_date:
+        sim_day7 = datetime.strptime(last_date, "%Y-%m-%d").replace(
+            hour=12, minute=0, second=0
+        )
+    else:
+        n_days   = meta.get("n_days") or max((e["day"] for e in days_seq), default=7)
+        sim_day7 = BASE_DATE + timedelta(days=n_days - 1)
 
     # ── Visualization ─────────────────────────────────────────────────────────
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
