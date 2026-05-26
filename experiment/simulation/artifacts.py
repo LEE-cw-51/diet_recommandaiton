@@ -61,11 +61,12 @@ def load_artifacts(out_dir: Path, *, trust: bool = False) -> dict:
 
     보안 주의: 이 함수는 `allow_pickle=True`로 npz를 역직렬화하므로, 신뢰할 수 없는
     파일을 읽으면 임의 코드 실행 위험이 있다. 따라서 기본적으로 **프로젝트 결과
-    디렉토리(`experiment/results/`) 하위 파일만** 로드를 허용한다. 그 밖의 경로는
-    명시적으로 신뢰를 표시해야 한다:
-      - `load_artifacts(path, trust=True)` 인자, 또는
+    디렉토리(`experiment/results/`) 하위 out_dir의 artifacts.npz만** 로드를 허용한다.
+    그 밖의 디렉토리에서 읽으려면 명시적으로 신뢰를 표시해야 한다:
+      - `load_artifacts(out_dir, trust=True)` 인자, 또는
       - 환경변수 `DIET_TRUST_ARTIFACTS=1`
-    외부에서 내려받은/공유된 artifacts.npz 는 신뢰하지 말 것.
+    외부에서 내려받은/공유된 artifacts.npz(또는 그것이 들어 있는 디렉토리)는
+    신뢰하지 말 것.
     """
     path = Path(out_dir) / _ARTIFACT_NAME
     if not path.exists():
