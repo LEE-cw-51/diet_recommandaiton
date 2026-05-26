@@ -1,7 +1,8 @@
 """experiment.simulation — 계산 전담 계층.
 
 이 패키지의 스크립트는 최적화를 실행하고 결과를 results/에 **아티팩트로 저장**한다.
-그래프는 그리지 않는다 (시각화는 experiment.visualization 가 아티팩트를 로드해 담당).
+기본적인 시각화 책임은 experiment.visualization 가 아티팩트를 로드해 담당한다.
+다만 일부 시나리오 스크립트는 진단/확인용 plot을 선택적으로 생성할 수 있다.
 
   engine.py      — run_once(), build_kg(), F 스냅샷 Callback
   artifacts.py   — save_artifacts()/load_artifacts() (npz + CSV 계약)
