@@ -550,10 +550,12 @@ def _draw_kg_panel(
     ax.axis("off")
 
 
-def _load_eaten_sequence(cuisine: str) -> list[dict] | None:
+def _load_eaten_sequence(cuisine: str) -> dict | None:
     """run_step2_cuisine 가 저장한 일별 섭취 시퀀스를 로드.
 
-    포맷: [{"day": int, "date": "YYYY-MM-DD", "menu_ids": [str, ...]}, ...]
+    포맷: {"meta": {"n_days": int, "last_date": "YYYY-MM-DD"},
+           "days": [{"day": int, "date": "YYYY-MM-DD", "menu_ids": [str, ...]}, ...]}
+    (구버전 호환: 최상위가 list 인 경우 days 로 간주하고 meta 를 보강한다.)
     파일이 없으면 None (Figure 3은 건너뜀 — 최적화 재실행 금지).
     """
     import json
@@ -562,7 +564,13 @@ def _load_eaten_sequence(cuisine: str) -> list[dict] | None:
     if not path.exists():
         return None
     with path.open(encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+
+    # 구버전(list) → 신버전({meta, days}) 정규화
+    if isinstance(data, list):
+        last_date = max((e["date"] for e in data), default=None)
+        return {"meta": {"n_days": len(data), "last_date": last_date}, "days": data}
+    return data
 
 
 def plot_kg_visualization(out_dir: Path) -> None:
@@ -581,6 +589,8 @@ def plot_kg_visualization(out_dir: Path) -> None:
         print("  [Figure 3] kg_eaten_sequence.json 없음 — "
               "run_step2_cuisine 를 재실행해 시퀀스를 생성하세요. Figure 3 생략.")
         return
+    days_seq = seq["days"]
+    meta     = seq.get("meta", {})
 
     print("  [Figure 3] Loading Supabase data...")
     loader     = FoodDataLoader.from_supabase()
@@ -606,15 +616,23 @@ def plot_kg_visualization(out_dir: Path) -> None:
     # ── Day 7 KG — 저장된 섭취 시퀀스 재생 (최적화 재실행 없음) ───────────────
     print("  [Figure 3] Replaying saved eaten sequence to rebuild Day 7 KG ...")
     kg_day7 = _build_kg_cuisine_local(all_foods, cuisine, weight)
-    for entry in seq:
+    for entry in days_seq:
         day_date = datetime.strptime(entry["date"], "%Y-%m-%d").replace(
             hour=12, minute=0, second=0
         )
         for mid in entry.get("menu_ids", []):
             kg_day7.record_eating(TEST_USER, mid, day_date)
 
-    last_day = max((e["day"] for e in seq), default=7)
-    sim_day7 = BASE_DATE + timedelta(days=last_day - 1)
+    # sim_now 는 항상 마지막 날(Day N) 기준 — 해 없는 날이 시퀀스에 있어도
+    # 시간 진행이 짧아지지 않도록 meta.last_date / n_days 를 우선 사용한다.
+    last_date = meta.get("last_date")
+    if last_date:
+        sim_day7 = datetime.strptime(last_date, "%Y-%m-%d").replace(
+            hour=12, minute=0, second=0
+        )
+    else:
+        n_days   = meta.get("n_days") or max((e["day"] for e in days_seq), default=7)
+        sim_day7 = BASE_DATE + timedelta(days=n_days - 1)
 
     # ── Visualization ─────────────────────────────────────────────────────────
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))

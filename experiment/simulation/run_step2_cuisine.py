@@ -245,22 +245,33 @@ def save_kg_eaten_sequence(out_dir: Path, daily_logs: list[dict]) -> None:
 
     plot_step2.plot_kg_visualization 이 이 파일을 재생해 Day7 KG를 재구성하므로,
     시각화 단계에서 최적화를 재실행하지 않아도 된다.
+
+    주의: 해가 없었던 날(menu_ids 비어 있음)도 **반드시 기록**한다. 누락하면
+    시각화에서 시간 진행이 짧아져(Day7에 못 미침) decay/last_ate 기반 색·두께가
+    실제 7일 상태와 어긋난다. 빈 날은 menu_ids=[] 로 남기고, 별도 meta에
+    n_days / 마지막 날짜를 저장해 시각화가 항상 Day7 기준으로 sim_now를 잡게 한다.
     """
     import json
 
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "kg_eaten_sequence.json"
-    seq = [
+    days = [
         {
             "day":      log["day"],
             "date":     log["date"],
-            "menu_ids": log.get("menu_ids", []),
+            "menu_ids": log.get("menu_ids", []),  # 해 없는 날은 빈 리스트로 유지
         }
         for log in daily_logs
-        if log.get("menu_ids")
     ]
+    payload = {
+        "meta": {
+            "n_days":    len(daily_logs),
+            "last_date": daily_logs[-1]["date"] if daily_logs else None,
+        },
+        "days": days,
+    }
     with path.open("w", encoding="utf-8") as f:
-        json.dump(seq, f, ensure_ascii=False, indent=2)
+        json.dump(payload, f, ensure_ascii=False, indent=2)
     print(f"  JSON saved: {path.name}")
 
 

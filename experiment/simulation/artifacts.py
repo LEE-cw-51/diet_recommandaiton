@@ -23,11 +23,18 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
 
+from experiment import _PROJECT_ROOT
+
 _ARTIFACT_NAME = "artifacts.npz"
+
+# 신뢰 경로: 이 디렉토리 아래의 artifacts.npz 만 기본적으로 로드 허용.
+# (save_artifacts 가 결과를 저장하는 유일한 위치)
+_TRUSTED_RESULTS_ROOT = (_PROJECT_ROOT / "experiment" / "results").resolve()
 
 
 def save_artifacts(out_dir: Path, payload: dict) -> Path:
@@ -40,13 +47,25 @@ def save_artifacts(out_dir: Path, payload: dict) -> Path:
     return path
 
 
-def load_artifacts(out_dir: Path) -> dict:
+def _is_trusted_path(path: Path) -> bool:
+    """path 가 신뢰 결과 디렉토리(_TRUSTED_RESULTS_ROOT) 하위인지 검사."""
+    try:
+        path.resolve().relative_to(_TRUSTED_RESULTS_ROOT)
+        return True
+    except ValueError:
+        return False
+
+
+def load_artifacts(out_dir: Path, *, trust: bool = False) -> dict:
     """out_dir/artifacts.npz → payload dict 복원.
 
-    보안 주의: 이 함수는 `allow_pickle=True`로 npz를 로드하므로, 신뢰할 수 없는
-    파일을 읽으면 임의 코드 실행 위험이 있다. artifacts.npz는 **로컬에서
-    `save_artifacts`로 직접 생성한 파일만** 로드하는 것을 전제로 한다.
-    외부에서 내려받은/공유된 파일은 절대 로드하지 말 것.
+    보안 주의: 이 함수는 `allow_pickle=True`로 npz를 역직렬화하므로, 신뢰할 수 없는
+    파일을 읽으면 임의 코드 실행 위험이 있다. 따라서 기본적으로 **프로젝트 결과
+    디렉토리(`experiment/results/`) 하위 파일만** 로드를 허용한다. 그 밖의 경로는
+    명시적으로 신뢰를 표시해야 한다:
+      - `load_artifacts(path, trust=True)` 인자, 또는
+      - 환경변수 `DIET_TRUST_ARTIFACTS=1`
+    외부에서 내려받은/공유된 artifacts.npz 는 신뢰하지 말 것.
     """
     path = Path(out_dir) / _ARTIFACT_NAME
     if not path.exists():
@@ -54,7 +73,18 @@ def load_artifacts(out_dir: Path) -> dict:
             f"아티팩트 없음: {path}\n"
             f"  먼저 시뮬레이션을 실행하세요 (예: python -X utf8 -m experiment.simulation.run_step1)."
         )
-    # allow_pickle=True: 신뢰된 로컬 생성 파일만 대상으로 한다 (위 docstring 참고).
+
+    trusted = trust or os.environ.get("DIET_TRUST_ARTIFACTS") == "1" or _is_trusted_path(path)
+    if not trusted:
+        raise PermissionError(
+            f"신뢰되지 않은 경로의 artifacts 로드 차단: {path}\n"
+            f"  이 파일은 pickle 기반(allow_pickle=True)이라 임의 코드 실행 위험이 있습니다.\n"
+            f"  신뢰 위치는 {_TRUSTED_RESULTS_ROOT} 하위입니다.\n"
+            f"  직접 생성/검증한 파일이라면 load_artifacts(..., trust=True) 또는 "
+            f"환경변수 DIET_TRUST_ARTIFACTS=1 로 허용하세요."
+        )
+
+    # allow_pickle=True: 위 가드를 통과한 신뢰 파일만 대상으로 한다.
     data = np.load(path, allow_pickle=True)
     return data["payload"].item()
 
