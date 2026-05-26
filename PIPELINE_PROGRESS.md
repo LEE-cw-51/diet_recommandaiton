@@ -10,8 +10,39 @@
 - **완료**: **A/B 유저 스터디 전체 파이프라인 구축** ✅ (Session 18, PR #11~14)
 - **완료**: **설문 앱 품질 보완 + 배포** ✅ (Session 19, PR #15~19)
 - **완료**: **A/B 유저 스터디 응답 수집 + 분석 + 추첨** ✅ (Session 20)
+- **완료**: **experiment/ 구조 개편 — 계산/시각화/평가 분리 + 모듈화** ✅ (Session 22)
 - **다음 작업**: 논문 작성 (유저 스터디 결과 반영)
-- 마지막 업데이트: 2026-05-21 (Session 20, 유저 스터디 완료)
+- 마지막 업데이트: 2026-05-26 (Session 22, experiment/ 구조 개편)
+
+## Session 22 완료 내용 (2026-05-26)
+
+### experiment/ 구조 개편 — 논문 목차 정합 + 계산/시각화 분리
+
+**목표:** 시각화 시 알고리즘 재실행이 없도록 계산과 시각화를 분리하고, 공통 로직을 모듈화.
+
+**핵심 변경:**
+- 신규 패키지: `experiment/models/`(변형·상수 단일 출처), `experiment/simulation/`(계산),
+  `experiment/visualization/`(시각화), `experiment/evaluation/`(사용자 평가)
+- `experiment/tools/` 제거 — 스크립트를 역할별로 이동
+- 공통 로직 추출: `algorithms/builders.py`(make_nsga2/make_rnsga2),
+  `models/variants.py`(REF_G2/REF_G3/SEED_START/GROUP_*), `simulation/engine.py`(run_once/build_kg)
+- 아티팩트 계약: `simulation/artifacts.py` — `run_step1`이 `artifacts.npz`(per-run F·스냅샷·머지 Pareto·메트릭)
+  저장 → 시각화가 로드만 함
+- **결합 제거**: `plot_pareto`(과거 5회 재실행) / Figure 3 KG viz(과거 7일 재최적화) → 저장 데이터 재생으로 대체
+
+**신규 실행 커맨드:**
+```
+python -X utf8 -m experiment.simulation.run_step1 [--test] [--plot]
+python -X utf8 -m experiment.visualization.plot_step1
+python -X utf8 -m experiment.visualization.plot_pareto
+python -X utf8 -m experiment.simulation.run_step2_cuisine [--test]
+python -X utf8 -m experiment.visualization.plot_step2
+python -X utf8 -m experiment.evaluation.{generate,analyze,raffle}_user_study
+```
+
+**문서:** 논문 목차 ↔ 코드 매핑은 [PAPER_OUTLINE.md](PAPER_OUTLINE.md).
+**검증:** 14개 모듈 import OK + 합성 아티팩트로 시각화 5종 PNG 생성 확인(최적화 재실행 0회).
+**주의:** 아래 과거 세션 로그의 `experiment/tools/...` 경로는 당시 기준 기록 — 현재 경로는 위 커맨드 참조.
 
 ## Session 20 완료 내용 (2026-05-21)
 

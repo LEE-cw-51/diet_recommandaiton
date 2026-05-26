@@ -5,14 +5,17 @@ for diet recommendation. It is NOT intended for external use.
 
 Internal Structure:
   core/           — Problem definitions, data loaders, metrics, KG manager
-  algorithms/     — NSGA-II and R-NSGA-II algorithm factories
+  algorithms/     — NSGA-II / R-NSGA-II factory + builders
+  models/         — Model variants (G1/G2/G3) + reproducibility constants
   config/         — YAML experiment configurations
-  results/        — Output directory for experiment runs
-  tools/          — Utility scripts (e.g., simulate_kg for KG validation)
+  simulation/     — Compute layer: runs optimization, saves artifacts (no plotting)
+  visualization/  — Plot layer: loads artifacts/CSV only, never re-runs the optimizer
+  evaluation/     — User-study (A/B test) tooling
+  results/        — Output directory for experiment runs (CSV / PNG / artifacts.npz)
 
 Internal Constants:
-  _PROJECT_ROOT  — Project root path. Used by core modules (loader/runner/simulate_kg)
-                   to setup sys.path for importing db.client. NOT for external use.
+  _PROJECT_ROOT  — Project root path. Used by submodules to setup sys.path for
+                   importing db.client. NOT for external use.
 
 Public API: None (__all__ = [])
 """

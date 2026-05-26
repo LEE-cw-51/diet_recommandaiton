@@ -11,8 +11,8 @@
   4. 카테고리가 특정 메뉴로 편중되지 않는가 (Diversity)
 
 사용법:
-  python -X utf8 -m experiment.tools.simulate_kg --days 7 --cal_star 2000 --price_star 8000
-  python -X utf8 -m experiment.tools.simulate_kg --days 7 --cal_star 2000 --price_star 8000 --test
+  python -X utf8 -m experiment.simulation.simulate_kg --days 7 --cal_star 2000 --price_star 8000
+  python -X utf8 -m experiment.simulation.simulate_kg --days 7 --cal_star 2000 --price_star 8000 --test
 """
 
 from __future__ import annotations

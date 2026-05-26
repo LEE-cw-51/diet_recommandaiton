@@ -5,9 +5,9 @@ meta.json을 참조해 A/B 라벨을 G2/G3로 blind decode한다.
 식문화별로 각 기준의 G3 승률(%) 및 G3 선택률을 출력한다.
 
 사용법:
-  python -X utf8 -m experiment.tools.analyze_user_study
-  python -X utf8 -m experiment.tools.analyze_user_study --cuisine 한식
-  python -X utf8 -m experiment.tools.analyze_user_study --out_csv experiment/results/user_study/analysis_result.csv
+  python -X utf8 -m experiment.evaluation.analyze_user_study
+  python -X utf8 -m experiment.evaluation.analyze_user_study --cuisine 한식
+  python -X utf8 -m experiment.evaluation.analyze_user_study --out_csv experiment/results/user_study/analysis_result.csv
 """
 
 from __future__ import annotations

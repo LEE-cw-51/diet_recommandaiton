@@ -5,8 +5,8 @@
   - response_time_seconds >= min_time (기본 30초)
 
 사용법:
-  python -X utf8 -m experiment.tools.raffle_user_study
-  python -X utf8 -m experiment.tools.raffle_user_study --n_winners 5 --min_time 30
+  python -X utf8 -m experiment.evaluation.raffle_user_study
+  python -X utf8 -m experiment.evaluation.raffle_user_study --n_winners 5 --min_time 30
 """
 
 from __future__ import annotations

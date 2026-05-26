@@ -22,9 +22,9 @@ G1/G2/G3 구성:
   plot_cuisine_f4_comparison.png    (5개 식문화 f4 추이 비교)
 
 사용법:
-  python -X utf8 -m experiment.tools.run_simulation_step2_cuisine --test
-  python -X utf8 -m experiment.tools.run_simulation_step2_cuisine --cuisines 한식 양식
-  python -X utf8 -m experiment.tools.run_simulation_step2_cuisine
+  python -X utf8 -m experiment.simulation.run_step2_cuisine --test
+  python -X utf8 -m experiment.simulation.run_step2_cuisine --cuisines 한식 양식
+  python -X utf8 -m experiment.simulation.run_step2_cuisine
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ try:
 except ImportError:
     HAS_MPL = False
 
-# ── step1에서 재사용 ───────────────────────────────────────────────────────────
-from experiment.tools.run_simulation_step1 import (  # noqa: E402
+# ── 계산 로직 재사용 (simulation.run_step1) ─────────────────────────────────
+from experiment.simulation.run_step1 import (  # noqa: E402
     run_loop_a,
     compute_loop_a_metrics,
     compute_wilcoxon,
@@ -62,17 +62,20 @@ from experiment.tools.run_simulation_step1 import (  # noqa: E402
     save_perrun_metrics_csv,
     save_daily_csvs,
     print_summary,
+)
+# ── 시각화 함수 재사용 (visualization.plot_step1 — 데이터 인자 직접 수용) ────
+from experiment.visualization.plot_step1 import (  # noqa: E402
     plot_convergence,
     plot_7days_f4,
     plot_metrics_boxplot,
     plot_metrics_bar,
+)
+# ── 모델 변형 상수 (models.variants 단일 출처) ──────────────────────────────
+from experiment.models.variants import (  # noqa: E402
     N_MEALS,
+    REF_G3 as _REF_G3,
     SEED_START,
-    _REF_G2,
-    _REF_G3,
     TEST_USER,
-    _GROUP_COLORS,
-    _GROUP_LABELS,
 )
 
 # ── 상수 ───────────────────────────────────────────────────────────────────────
@@ -140,7 +143,7 @@ def run_loop_b_cuisine(
 
     run_simulation_step1.run_loop_b와 동일하나, KG 초기화를 cuisine 기반으로 변경.
     """
-    from experiment.tools.simulate_kg import _run_one_day
+    from experiment.simulation.simulate_kg import _run_one_day
     from experiment.core.daily_exp3_problem import DailyExp3Problem
     from experiment.core.kg_manager import make_menu_id
     from experiment.core.nutrition import NutritionProfile
@@ -221,6 +224,7 @@ def run_loop_b_cuisine(
             "f1": float(f1), "f2": float(f2),
             "f3": float(f3), "f4": float(f4),
             "menu_names": menu_names, "categories": categories,
+            "menu_ids": menu_ids_today,
             "duplication_rate": float(dup_rate),
         })
 
@@ -234,6 +238,30 @@ def run_loop_b_cuisine(
 # ──────────────────────────────────────────────────────────────────────────────
 # 식문화간 비교 저장 / 시각화
 # ──────────────────────────────────────────────────────────────────────────────
+
+def save_kg_eaten_sequence(out_dir: Path, daily_logs: list[dict]) -> None:
+    """Loop B 일별 섭취 메뉴 시퀀스를 JSON으로 저장 (시각화 Figure 3 재생용).
+
+    plot_step2.plot_kg_visualization 이 이 파일을 재생해 Day7 KG를 재구성하므로,
+    시각화 단계에서 최적화를 재실행하지 않아도 된다.
+    """
+    import json
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "kg_eaten_sequence.json"
+    seq = [
+        {
+            "day":      log["day"],
+            "date":     log["date"],
+            "menu_ids": log.get("menu_ids", []),
+        }
+        for log in daily_logs
+        if log.get("menu_ids")
+    ]
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(seq, f, ensure_ascii=False, indent=2)
+    print(f"  JSON saved: {path.name}")
+
 
 def save_cuisine_summary_csv(out_dir: Path, summary_rows: list[dict]) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -440,6 +468,7 @@ def main() -> None:
                 cuisine=cuisine, weight=args.weight,
             )
             save_daily_csvs(out_dir, daily_logs)
+            save_kg_eaten_sequence(out_dir, daily_logs)
             if HAS_MPL:
                 plot_7days_f4(out_dir, daily_logs)
 
