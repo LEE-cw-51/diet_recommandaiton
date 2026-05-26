@@ -6,12 +6,16 @@
 저장 형식:
   results/<scenario>/artifacts.npz   — 단일 키 'payload' 에 중첩 dict (pickle).
     payload = {
-        "groups":     {G: {"F_list":[ndarray...], "times":[...], "snapshots_all":[[(gen,F)...]...]}},
-        "nadir_map":  {G: ndarray},
-        "pareto":     {"G1":pf, "G2":pf, "G3":pf, "ref": ref_front},  # Loop A 30회에서 머지
-        "kg_eaten":   {day: [menu_id, ...]},   # Loop B 일별 섭취 (KG 상태 재구성용, optional)
-        "meta":       {"n_gen":..., "pop_size":..., "n_runs":..., "n_days":...},
+        "groups":      {G: {"F_list":[ndarray...], "times":[...], "snapshots_all":[[(gen,F)...]...]}},
+        "nadir_map":   {G: ndarray},
+        "pareto":      {"G1":pf, "G2":pf, "G3":pf, "ref": ref_front},  # Loop A 30회에서 머지
+        "daily_logs":  [...],   # Loop B 일별 로그(raw). 상세 구조는 run_step1 생성 스키마를 따른다.
+        "meta":        {"n_gen":..., "pop_size":..., "n_runs":..., "n_days":...},
     }
+
+  참고:
+    - `kg_eaten`는 artifacts payload의 계약 키가 아니다.
+    - KG 상태 재구성용 섭취 시퀀스가 필요하면 step2에서 별도 `kg_eaten_sequence.json`을 사용한다.
 
   CSV(metrics_comparison / per_run_metrics / daily_*)는 별도로 저장된다(사람이 읽고 논문 표에 사용).
   npz는 시각화 재현 전용.
