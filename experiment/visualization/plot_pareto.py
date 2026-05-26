@@ -130,7 +130,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="G1/G2/G3 Pareto Front 시각화 (저장된 PF 로드 — 재실행 없음)")
     parser.add_argument("--dir", default=str(_OUT_DIR),
-                        help="아티팩트 디렉토리 (기본: experiment/results/step1)")
+                        help="아티팩트 디렉토리 (기본: experiment/results/step1). "
+                             "experiment/results/ 밖 경로는 pickle 보안 가드로 차단됨 "
+                             "— 외부 경로는 DIET_TRUST_ARTIFACTS=1 환경변수로 허용.")
     args = parser.parse_args()
 
     out_dir = Path(args.dir)
