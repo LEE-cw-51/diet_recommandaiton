@@ -15,7 +15,7 @@ diet_recommendation/
 │   ├── models/                # 모델 변형(G1/G2/G3) + 재현성 상수 (variants.py)
 │   ├── algorithms/            # NSGA-II / R-NSGA-II 팩토리 + 빌더
 │   ├── config/                # 실험 설정 YAML (daily_exp3_rnsga2.yaml)
-│   ├── simulation/            # 계산 전담 — 최적화 실행 후 아티팩트 저장 (그림 X)
+│   ├── simulation/            # 계산 전담 — 최적화 실행 후 아티팩트 저장 (plot은 옵션)
 │   ├── visualization/         # 시각화 전담 — 아티팩트/CSV만 로드 (최적화 재실행 X)
 │   ├── evaluation/            # 사용자 평가(A/B) 도구
 │   └── results/               # 결과 CSV / 그림 / artifacts.npz (output/는 git 제외)
@@ -47,7 +47,7 @@ diet_recommendation/
         ▼
   simulation/            최적화 실행 (NSGA-II / R-NSGA-II, 30회·7일)
    run_step1 · run_step2_cuisine · run_step1_coldstart · simulate_kg
-        │  계산 결과 저장 (그림은 그리지 않음)
+        │  계산 결과 저장 (기본은 계산만 — `--plot` 옵션 시 직후 시각화 호출)
         ▼
   results/<scenario>/
     ├── *.csv                   논문 표용 지표·일별 추이
@@ -63,7 +63,7 @@ diet_recommendation/
 | `core/` | 문제 정의(DailyExp3Problem)·KGManager·데이터 로더·지표 (변경 없음) |
 | `models/` | G1/G2/G3 변형·참조점·시드 **단일 출처** (`variants.py`) |
 | `algorithms/` | NSGA-II / R-NSGA-II `factory` + `builders` |
-| `simulation/` | 최적화 실행 → `artifacts.npz` + CSV 저장 (그림 X) |
+| `simulation/` | 최적화 실행 → `artifacts.npz` + CSV 저장 (기본은 계산만, plot은 `--plot` 옵션) |
 | `visualization/` | 아티팩트·CSV 로드 → PNG (optimizer 재실행 X) |
 | `evaluation/` | A/B 유저 스터디 생성·분석·추첨 |
 

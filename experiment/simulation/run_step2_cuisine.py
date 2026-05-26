@@ -10,21 +10,22 @@ G1/G2/G3 구성:
 
 식문화별 KG 초기화는 G3의 f4 목적함수에만 영향.
 
-산출물: experiment/results/step2_cuisine/
+산출물 (계산 — 항상 생성): experiment/results/step2_cuisine/
   {cuisine}/metrics_comparison.csv
   {cuisine}/daily_f4_trend.csv
   {cuisine}/daily_duplication.csv
-  {cuisine}/plot_convergence.png
-  {cuisine}/plot_metrics_boxplot.png
-  {cuisine}/plot_metrics_bar.png
-  {cuisine}/plot_7days_f4.png
-  cuisine_summary.csv               (식문화별 G3 지표 요약)
-  plot_cuisine_f4_comparison.png    (5개 식문화 f4 추이 비교)
+  {cuisine}/kg_eaten_sequence.json   (Figure 3 재생용 Loop B 섭취 시퀀스)
+  cuisine_summary.csv                (식문화별 G3 지표 요약)
+
+PNG (--plot 옵션 시에만 생성, 평소엔 visualization.plot_step2 가 담당):
+  {cuisine}/plot_convergence.png · plot_metrics_boxplot.png · plot_metrics_bar.png · plot_7days_f4.png
+  plot_cuisine_f4_comparison.png · plot_cuisine_loop_a_summary.png
 
 사용법:
   python -X utf8 -m experiment.simulation.run_step2_cuisine --test
   python -X utf8 -m experiment.simulation.run_step2_cuisine --cuisines 한식 양식
-  python -X utf8 -m experiment.simulation.run_step2_cuisine
+  python -X utf8 -m experiment.simulation.run_step2_cuisine            # 계산만
+  python -X utf8 -m experiment.simulation.run_step2_cuisine --plot     # 계산 + PNG
 """
 
 from __future__ import annotations
@@ -374,6 +375,8 @@ def main() -> None:
     parser.add_argument("--test",        action="store_true",
                         help="빠른 테스트 (pop=10, gen=20, runs=3, days=2)")
     parser.add_argument("--skip_loop_b", action="store_true")
+    parser.add_argument("--plot",        action="store_true",
+                        help="계산 직후 PNG 생성 (기본은 계산만, 그림은 visualization 계층 담당)")
     args = parser.parse_args()
 
     if args.test:
@@ -449,7 +452,7 @@ def main() -> None:
         save_metrics_csv(out_dir, metrics, p_vals, args.n_runs)
         save_perrun_metrics_csv(out_dir, metrics)
 
-        if HAS_MPL:
+        if args.plot and HAS_MPL:
             plot_convergence(out_dir, groups, nadir_map, args.n_gen)
             plot_metrics_boxplot(out_dir, metrics, p_vals)
             plot_metrics_bar(out_dir, metrics, p_vals)
@@ -469,7 +472,7 @@ def main() -> None:
             )
             save_daily_csvs(out_dir, daily_logs)
             save_kg_eaten_sequence(out_dir, daily_logs)
-            if HAS_MPL:
+            if args.plot and HAS_MPL:
                 plot_7days_f4(out_dir, daily_logs)
 
         cuisine_logs_for_plot[cuisine] = daily_logs
@@ -501,7 +504,7 @@ def main() -> None:
 
     save_cuisine_summary_csv(_OUT_DIR, all_cuisine_summaries)
 
-    if HAS_MPL:
+    if args.plot and HAS_MPL:
         if not args.skip_loop_b:
             plot_cuisine_f4_comparison(_OUT_DIR, cuisine_logs_for_plot)
         plot_cuisine_loop_a_summary(_OUT_DIR, cuisine_g3_metrics)

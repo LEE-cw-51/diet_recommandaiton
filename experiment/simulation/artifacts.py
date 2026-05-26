@@ -41,13 +41,20 @@ def save_artifacts(out_dir: Path, payload: dict) -> Path:
 
 
 def load_artifacts(out_dir: Path) -> dict:
-    """out_dir/artifacts.npz → payload dict 복원."""
+    """out_dir/artifacts.npz → payload dict 복원.
+
+    보안 주의: 이 함수는 `allow_pickle=True`로 npz를 로드하므로, 신뢰할 수 없는
+    파일을 읽으면 임의 코드 실행 위험이 있다. artifacts.npz는 **로컬에서
+    `save_artifacts`로 직접 생성한 파일만** 로드하는 것을 전제로 한다.
+    외부에서 내려받은/공유된 파일은 절대 로드하지 말 것.
+    """
     path = Path(out_dir) / _ARTIFACT_NAME
     if not path.exists():
         raise FileNotFoundError(
             f"아티팩트 없음: {path}\n"
             f"  먼저 시뮬레이션을 실행하세요 (예: python -X utf8 -m experiment.simulation.run_step1)."
         )
+    # allow_pickle=True: 신뢰된 로컬 생성 파일만 대상으로 한다 (위 docstring 참고).
     data = np.load(path, allow_pickle=True)
     return data["payload"].item()
 
