@@ -386,6 +386,8 @@ def main() -> None:
     parser.add_argument("--test",        action="store_true",
                         help="빠른 테스트 (pop=10, gen=20, runs=3, days=2)")
     parser.add_argument("--skip_loop_b", action="store_true")
+    parser.add_argument("--skip_loop_a", action="store_true",
+                        help="Loop A (알고리즘 비교 30회) 건너뜀 — Loop B만 실행")
     parser.add_argument("--plot",        action="store_true",
                         help="계산 직후 PNG 생성 (기본은 계산만, 그림은 visualization 계층 담당)")
     args = parser.parse_args()
@@ -430,43 +432,48 @@ def main() -> None:
         kg_base = _build_kg_cuisine(all_foods, cuisine, args.weight)
 
         # ── Loop A ───────────────────────────────────────────────────────────
-        print(f"\n  Loop A: G1/G2/G3 x {args.n_runs}회 독립 실행 [{cuisine}]")
-        groups = run_loop_a(
-            mains, sides_soup, drinks, snacks, kg_base,
-            args.cal_star, args.price_star,
-            args.n_runs, args.pop_size, args.n_gen,
-        )
+        metrics: dict = {}
+        p_vals:  dict = {}
+        if args.skip_loop_a:
+            print(f"\n  Loop A: 건너뜀 (--skip_loop_a) [{cuisine}]")
+        else:
+            print(f"\n  Loop A: G1/G2/G3 x {args.n_runs}회 독립 실행 [{cuisine}]")
+            groups = run_loop_a(
+                mains, sides_soup, drinks, snacks, kg_base,
+                args.cal_star, args.price_star,
+                args.n_runs, args.pop_size, args.n_gen,
+            )
 
-        # Reference Front & Nadir
-        F_3d_list = [F for g in ("G1", "G2") for F in groups[g]["F_list"] if len(F) > 0]
-        F_4d_list = [F for F in groups["G3"]["F_list"] if len(F) > 0]
+            # Reference Front & Nadir
+            F_3d_list = [F for g in ("G1", "G2") for F in groups[g]["F_list"] if len(F) > 0]
+            F_4d_list = [F for F in groups["G3"]["F_list"] if len(F) > 0]
 
-        if not F_3d_list or not F_4d_list:
-            print(f"  [{cuisine}] 유효한 해 없음 — 건너뜀")
-            continue
+            if not F_3d_list or not F_4d_list:
+                print(f"  [{cuisine}] 유효한 해 없음 — 건너뜀")
+                continue
 
-        all_F_3d  = np.vstack(F_3d_list)
-        ref_3d    = compute_reference_pf(all_F_3d)
-        nadir_3d  = all_F_3d.max(axis=0) * 1.1
+            all_F_3d  = np.vstack(F_3d_list)
+            ref_3d    = compute_reference_pf(all_F_3d)
+            nadir_3d  = all_F_3d.max(axis=0) * 1.1
 
-        all_F_4d  = np.vstack(F_4d_list)
-        ref_4d    = compute_reference_pf(all_F_4d)
-        nadir_4d  = all_F_4d.max(axis=0) * 1.1
+            all_F_4d  = np.vstack(F_4d_list)
+            ref_4d    = compute_reference_pf(all_F_4d)
+            nadir_4d  = all_F_4d.max(axis=0) * 1.1
 
-        ref_map   = {"G1": ref_3d,   "G2": ref_3d,   "G3": ref_4d}
-        nadir_map = {"G1": nadir_3d, "G2": nadir_3d, "G3": nadir_4d}
+            ref_map   = {"G1": ref_3d,   "G2": ref_3d,   "G3": ref_4d}
+            nadir_map = {"G1": nadir_3d, "G2": nadir_3d, "G3": nadir_4d}
 
-        metrics = compute_loop_a_metrics(groups, ref_map, nadir_map)
-        p_vals  = compute_wilcoxon(metrics)
-        print_summary(metrics, p_vals)
+            metrics = compute_loop_a_metrics(groups, ref_map, nadir_map)
+            p_vals  = compute_wilcoxon(metrics)
+            print_summary(metrics, p_vals)
 
-        save_metrics_csv(out_dir, metrics, p_vals, args.n_runs)
-        save_perrun_metrics_csv(out_dir, metrics)
+            save_metrics_csv(out_dir, metrics, p_vals, args.n_runs)
+            save_perrun_metrics_csv(out_dir, metrics)
 
-        if args.plot and HAS_MPL:
-            plot_convergence(out_dir, groups, nadir_map, args.n_gen)
-            plot_metrics_boxplot(out_dir, metrics, p_vals)
-            plot_metrics_bar(out_dir, metrics, p_vals)
+            if args.plot and HAS_MPL:
+                plot_convergence(out_dir, groups, nadir_map, args.n_gen)
+                plot_metrics_boxplot(out_dir, metrics, p_vals)
+                plot_metrics_bar(out_dir, metrics, p_vals)
 
         # G3 지표 수집 (식문화간 비교용)
         cuisine_g3_metrics[cuisine] = metrics.get("G3", {})
