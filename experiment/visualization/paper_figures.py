@@ -1,0 +1,808 @@
+"""논문용 그림 일괄 생성 스크립트.
+
+원칙:
+  - 모든 레이블·제목·범례: 영어
+  - 범례는 그래프 밖에 위치 (bbox_to_anchor)
+  - 수식은 matplotlib 렌더링 후 PNG 저장
+  - 300 DPI, colorblind-safe palette
+  - 기존 visualization/*.py 미수정
+
+출력 위치: experiment/results/paper_figures/
+
+사용법:
+  python -X utf8 -m experiment.visualization.paper_figures --sample   # fig1만 생성
+  python -X utf8 -m experiment.visualization.paper_figures --all      # 전체 생성
+"""
+from __future__ import annotations
+
+import argparse
+import shutil
+from pathlib import Path
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import numpy as np
+import pandas as pd
+
+from experiment import _PROJECT_ROOT
+
+_RESULTS = _PROJECT_ROOT / "experiment" / "results"
+_OUT = _RESULTS / "paper_figures"
+
+# ── 공통 스타일 ────────────────────────────────────────────────────────────────
+# matplotlib tab10 기본 팔레트 — 최적화 논문에서 가장 널리 쓰이는 표준 배색
+
+COLORS = {
+    "G1":     "#1f77b4",  # tab:blue
+    "G2":     "#ff7f0e",  # tab:orange
+    "G3":     "#2ca02c",  # tab:green
+    "before": "#d62728",  # tab:red
+    "after":  "#1f77b4",  # tab:blue
+}
+
+CUISINE_COLORS = {
+    "Korean":   "#1f77b4",  # tab:blue
+    "Western":  "#ff7f0e",  # tab:orange
+    "Bunsik":   "#2ca02c",  # tab:green
+    "Chinese":  "#d62728",  # tab:red
+    "Japanese": "#9467bd",  # tab:purple
+}
+
+CUISINE_MAP = {"한식": "Korean", "양식": "Western", "분식": "Bunsik", "중식": "Chinese", "일식": "Japanese"}
+
+DPI = 300
+SINGLE_W = 3.5   # single-column inches
+DOUBLE_W = 7.0   # double-column inches
+
+
+def apply_style() -> None:
+    plt.rcParams.update({
+        "font.family":      "DejaVu Sans",
+        "font.size":        9,
+        "axes.titlesize":   10,
+        "axes.labelsize":   9,
+        "xtick.labelsize":  8,
+        "ytick.labelsize":  8,
+        "legend.fontsize":  8,
+        "figure.dpi":       DPI,
+        "axes.spines.top":  False,
+        "axes.spines.right": False,
+    })
+
+
+# ── 유틸 ──────────────────────────────────────────────────────────────────────
+
+def _p_label(p: float) -> str:
+    if p < 0.001:
+        return "***"
+    if p < 0.01:
+        return "**"
+    if p < 0.05:
+        return "*"
+    return "n.s."
+
+
+def _load_step1_per_run() -> pd.DataFrame | None:
+    """step1/per_run_metrics.csv 로드. 없으면 None."""
+    p = _RESULTS / "step1" / "per_run_metrics.csv"
+    return pd.read_csv(p) if p.exists() else None
+
+
+def _load_cuisine_per_run_pooled() -> pd.DataFrame | None:
+    """식문화 5종 per_run_metrics.csv 를 합산해 반환 (폴백 전용)."""
+    frames = []
+    for cuisine_kr, cuisine_en in CUISINE_MAP.items():
+        p = _RESULTS / "step2_cuisine" / cuisine_kr / "per_run_metrics.csv"
+        if p.exists():
+            df = pd.read_csv(p)
+            df["cuisine"] = cuisine_en
+            frames.append(df)
+    return pd.concat(frames, ignore_index=True) if frames else None
+
+
+def _get_g1g2_per_run() -> tuple[pd.DataFrame, str]:
+    """(df, source_label) — step1 우선, 없으면 cuisine 풀링."""
+    df = _load_step1_per_run()
+    if df is not None:
+        return df[df.group.isin(["G1", "G2"])].copy(), "step1 (30 runs)"
+    df = _load_cuisine_per_run_pooled()
+    if df is not None:
+        return df[df.group.isin(["G1", "G2"])].copy(), "cuisine pooled (3 runs × 5, test-mode)"
+    return None, "no data"
+
+
+# ── Fig 1: G1 vs G2 박스플롯 ───────────────────────────────────────────────────
+
+def fig1_g1_g2_boxplot(out_dir: Path) -> None:
+    apply_style()
+    df, source = _get_g1g2_per_run()
+
+    metrics = ["HV", "GD+", "IGD+"]
+    fig, axes = plt.subplots(1, 3, figsize=(DOUBLE_W, 3.0))
+    fig.subplots_adjust(right=0.82, wspace=0.42)
+
+    for ax, metric in zip(axes, metrics):
+        g1 = df[df.group == "G1"][metric].dropna().values if df is not None else np.array([])
+        g2 = df[df.group == "G2"][metric].dropna().values if df is not None else np.array([])
+
+        if len(g1) == 0 or len(g2) == 0:
+            ax.text(0.5, 0.5, "No data\n(re-run simulation)", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=8, color="gray")
+            ax.set_title(metric)
+            continue
+
+        bp = ax.boxplot(
+            [g1, g2],
+            patch_artist=True,
+            widths=0.45,
+            medianprops=dict(color="black", linewidth=1.5),
+            whiskerprops=dict(linewidth=0.8),
+            capprops=dict(linewidth=0.8),
+            flierprops=dict(marker="o", markersize=3, alpha=0.5),
+        )
+        for patch, color in zip(bp["boxes"], [COLORS["G1"], COLORS["G2"]]):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+
+        ax.set_title(metric)
+        ax.set_xticks([1, 2])
+        ax.set_xticklabels(["G1\n(NSGA-II)", "G2\n(R-NSGA-II)"])
+        ax.set_ylabel("Value")
+
+    # 범례: 그래프 밖 오른쪽
+    legend_handles = [
+        mpatches.Patch(facecolor=COLORS["G1"], alpha=0.7, label="G1 (NSGA-II)"),
+        mpatches.Patch(facecolor=COLORS["G2"], alpha=0.7, label="G2 (R-NSGA-II)"),
+    ]
+    fig.legend(handles=legend_handles, loc="center right",
+               bbox_to_anchor=(1.0, 0.5), frameon=True, title="Algorithm")
+
+    fig.suptitle("Algorithm Comparison: G1 vs G2 (3-Objective Space)", y=1.02, fontsize=10)
+
+    out_path = out_dir / "fig1_g1_g2_boxplot.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Fig 2: HV 수렴 곡선 ────────────────────────────────────────────────────────
+
+def fig2_convergence(out_dir: Path) -> None:
+    """step1/artifacts.npz 에서 세대별 HV 수렴 곡선 생성.
+
+    snapshots_all: list[list[(gen, F_array)]] — 각 run × 각 snapshot에
+    파레토 해 집합(F_array)이 저장됨. 세대별 HV를 직접 계산해 평균±표준편차 곡선.
+    """
+    from experiment.simulation.artifacts import has_artifacts, load_artifacts
+    from experiment.core.metrics import compute_indicators, compute_reference_pf
+
+    step1_dir = _RESULTS / "step1"
+    apply_style()
+
+    if not has_artifacts(step1_dir):
+        _placeholder(out_dir / "fig2_g1_g2_convergence.png",
+                     "fig2: run simulation first\n(python -m experiment.simulation.run_step1)")
+        return
+
+    payload = load_artifacts(step1_dir)
+    groups  = payload["groups"]
+    nadir_map = payload["nadir_map"]   # {"G1": ndarray, "G2": ndarray, "G3": ndarray}
+
+    fig, ax = plt.subplots(figsize=(SINGLE_W * 1.4, 3.0))
+    fig.subplots_adjust(right=0.75)
+
+    for gname in ("G1", "G2"):
+        snaps  = groups[gname]["snapshots_all"]   # list[list[(gen, F_array)]]
+        nadir  = nadir_map[gname]
+
+        # 이미 저장된 merged pareto front 를 ref_pf 로 사용 (메모리 절약)
+        ref_pf = payload["pareto"].get(gname, None)
+        if ref_pf is None or len(ref_pf) == 0:
+            continue
+
+        gen_hv: dict[int, list] = {}
+        for run_snaps in snaps:
+            for gen, F in run_snaps:
+                if len(F) == 0:
+                    continue
+                hv = compute_indicators(F, ref_pf, nadir)["HV"]
+                gen_hv.setdefault(int(gen), []).append(hv)
+
+        if not gen_hv:
+            continue
+
+        gens  = sorted(gen_hv)
+        means = np.array([np.nanmean(gen_hv[g]) for g in gens])
+        stds  = np.array([np.nanstd(gen_hv[g])  for g in gens])
+
+        ax.plot(gens, means, color=COLORS[gname], label=gname, linewidth=1.2)
+        ax.fill_between(gens, means - stds, means + stds,
+                        color=COLORS[gname], alpha=0.15)
+
+    ax.set_xlabel("Generation")
+    ax.set_ylabel("Hypervolume (HV)")
+    ax.set_title("HV Convergence Curve (G1 vs G2)")
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0),
+              frameon=True, title="Algorithm")
+
+    out_path = out_dir / "fig2_g1_g2_convergence.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Fig 3: Pareto 산점도 (f1-f2, f1-f3, f2-f3) ─────────────────────────────
+
+def fig3_pareto_scatter(out_dir: Path) -> None:
+    from experiment.simulation.artifacts import has_artifacts, load_artifacts
+
+    step1_dir = _RESULTS / "step1"
+    apply_style()
+
+    if not has_artifacts(step1_dir):
+        _placeholder(out_dir / "fig3_pareto_scatter.png",
+                     "fig3: run simulation first\n(python -m experiment.simulation.run_step1)")
+        return
+
+    payload = load_artifacts(step1_dir)
+    pareto = payload["pareto"]   # {"G1": ndarray(n,3), "G2": ndarray(n,3), "G3": ndarray(n,4)}
+
+    pairs = [(0, 1, "f1 (Calorie error)", "f2 (Macro error)"),
+             (0, 2, "f1 (Calorie error)", "f3 (Price error)"),
+             (1, 2, "f2 (Macro error)",   "f3 (Price error)")]
+
+    fig, axes = plt.subplots(1, 3, figsize=(DOUBLE_W, 2.8))
+    fig.subplots_adjust(right=0.82, wspace=0.38)
+
+    for ax, (i, j, xlabel, ylabel) in zip(axes, pairs):
+        for gname, marker, zorder in [("G1", "x", 1), ("G2", "^", 2)]:
+            pf = pareto.get(gname, np.empty((0, 3)))
+            if len(pf) == 0:
+                continue
+            xi, yj = pf[:, i], pf[:, j]
+            # 95th percentile clip — 이상치로 인한 축척 왜곡 방지
+            xclip = np.percentile(xi, 95)
+            yclip = np.percentile(yj, 95)
+            mask = (xi <= xclip) & (yj <= yclip)
+            ax.scatter(xi[mask], yj[mask],
+                       c=COLORS[gname], marker=marker,
+                       s=15, alpha=0.6, zorder=zorder, label=gname)
+        ax.set_xlabel(xlabel, fontsize=8)
+        ax.set_ylabel(ylabel, fontsize=8)
+
+    axes[0].set_title("Pareto Front Projections (3-Objective)")
+    legend_handles = [
+        plt.Line2D([0], [0], marker="x", color="w", markerfacecolor=COLORS["G1"],
+                   markeredgecolor=COLORS["G1"], markersize=6, label="G1 (NSGA-II)"),
+        plt.Line2D([0], [0], marker="^", color="w", markerfacecolor=COLORS["G2"],
+                   markeredgecolor=COLORS["G2"], markersize=6, label="G2 (R-NSGA-II)"),
+    ]
+    fig.legend(handles=legend_handles, loc="center right",
+               bbox_to_anchor=(1.0, 0.5), frameon=True, title="Algorithm")
+
+    out_path = out_dir / "fig3_pareto_scatter.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Fig 4: Cold Start f4 before/after ─────────────────────────────────────────
+
+def fig4_coldstart(out_dir: Path) -> None:
+    csv_path = _RESULTS / "step1_coldstart" / "daily_f4_trend_coldstart.csv"
+    apply_style()
+
+    if not csv_path.exists():
+        _placeholder(out_dir / "fig4_g3_f4_coldstart.png", "fig4: coldstart CSV not found")
+        return
+
+    df = pd.read_csv(csv_path)
+    fig, ax = plt.subplots(figsize=(SINGLE_W * 1.3, 3.0))
+    fig.subplots_adjust(right=0.72)
+
+    ax.plot(df.day, df.f4_before, color=COLORS["before"],
+            linewidth=1.5, linestyle="--", marker="s", markersize=5, label="Without Init")
+    ax.plot(df.day, df.f4_after,  color=COLORS["after"],
+            linewidth=1.5, linestyle="-",  marker="o", markersize=5, label="Cuisine-based Init")
+
+    ax.set_xlabel("Day")
+    ax.set_ylabel("f4 (KG Error Rate)")
+    ax.set_title("Cold Start: f4 Before vs After Initialization")
+    ax.set_xticks(df.day)
+
+    # 83% reduction 주석
+    f4_end = df.f4_after.iloc[-1]
+    f4_start = df.f4_before.iloc[0]
+    reduction = (f4_start - f4_end) / f4_start * 100
+    ax.annotate(f"−{reduction:.0f}%", xy=(df.day.iloc[-1], f4_end),
+                xytext=(df.day.iloc[-1] - 1.5, f4_end + 0.05),
+                fontsize=7.5, color=COLORS["after"],
+                arrowprops=dict(arrowstyle="->", color=COLORS["after"], lw=0.8))
+
+    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), frameon=True)
+
+    out_path = out_dir / "fig4_g3_f4_coldstart.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Fig 5: 7일 KG 업데이트 f4 추이 (Loop B) — 한식·양식 각각 ────────────────────
+
+def _fig5_single(out_dir: Path, cuisine_kr: str, cuisine_en: str, color: str) -> None:
+    """cuisine 1개에 대한 Loop B 7일 f4 + 중복률 그림."""
+    apply_style()
+
+    p_f4  = _RESULTS / "step2_cuisine" / cuisine_kr / "daily_f4_trend.csv"
+    p_dup = _RESULTS / "step2_cuisine" / cuisine_kr / "daily_duplication.csv"
+    if not p_f4.exists():
+        _placeholder(out_dir / f"fig5_{cuisine_en.lower()}_7days.png",
+                     f"fig5 {cuisine_en}: no data")
+        return
+
+    df_f4  = pd.read_csv(p_f4)
+    df_dup = pd.read_csv(p_dup) if p_dup.exists() else None
+
+    fig, ax1 = plt.subplots(figsize=(SINGLE_W * 1.4, 2.8))
+
+    ax1.plot(df_f4.day, df_f4.f4, color=color,
+             linewidth=1.5, marker="o", markersize=5, label="f4 (KG error)")
+    ax1.set_xlabel("Day")
+    ax1.set_ylabel("f4 (KG Error Rate)", color=color)
+    ax1.tick_params(axis="y", labelcolor=color)
+    ax1.set_xticks(range(1, 8))
+    ax1.set_ylim(bottom=0)
+
+    if df_dup is not None:
+        ax2 = ax1.twinx()
+        ax2.bar(df_dup.day, df_dup.duplication_rate * 100,
+                alpha=0.25, color="#888888", width=0.5, label="Dup. rate (%)")
+        ax2.set_ylabel("Duplication Rate (%)", color="#666666")
+        ax2.tick_params(axis="y", labelcolor="#666666")
+        max_dup = df_dup.duplication_rate.max() * 100
+        ax2.set_ylim(0, max(max_dup * 1.5, 4))
+        lines2, labels2 = ax2.get_legend_handles_labels()
+    else:
+        lines2, labels2 = [], []
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2,
+               loc="upper right", fontsize=7, frameon=True)
+
+    ax1.set_title(f"7-Day KG Update: {cuisine_en} (G3, Loop B)")
+
+    fname = f"fig5_{cuisine_en.lower()}_7days.png"
+    fig.savefig(out_dir / fname, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved → {fname}")
+
+
+def fig5_7days_f4(out_dir: Path) -> None:
+    """한식·양식 각각 별도 그림으로 생성."""
+    targets = [("한식", "Korean", CUISINE_COLORS["Korean"]),
+               ("양식", "Western", CUISINE_COLORS["Western"])]
+    for cuisine_kr, cuisine_en, color in targets:
+        _fig5_single(out_dir, cuisine_kr, cuisine_en, color)
+
+
+# ── Fig 6: G2 vs G3 — f1/f2/f3 3D 투영 비교 ──────────────────────────────────
+
+def fig6_g2_vs_g3_3d(out_dir: Path) -> None:
+    from experiment.simulation.artifacts import has_artifacts, load_artifacts
+
+    step1_dir = _RESULTS / "step1"
+    apply_style()
+
+    if not has_artifacts(step1_dir):
+        _placeholder(out_dir / "fig6_g2_vs_g3_3d.png",
+                     "fig6: run simulation first")
+        return
+
+    payload = load_artifacts(step1_dir)
+    pareto = payload["pareto"]
+
+    pairs = [(0, 1, "f1 (Calorie error)", "f2 (Macro error)"),
+             (0, 2, "f1 (Calorie error)", "f3 (Price error)"),
+             (1, 2, "f2 (Macro error)",   "f3 (Price error)")]
+
+    fig, axes = plt.subplots(1, 3, figsize=(DOUBLE_W, 2.8))
+    fig.subplots_adjust(right=0.82, wspace=0.38)
+
+    for ax, (i, j, xlabel, ylabel) in zip(axes, pairs):
+        g2 = pareto.get("G2", np.empty((0, 3)))
+        g3 = pareto.get("G3", np.empty((0, 4)))
+        if len(g2) > 0:
+            ax.scatter(g2[:, i], g2[:, j], c=COLORS["G2"],
+                       marker="^", s=15, alpha=0.6, zorder=1, label="G2")
+        if len(g3) > 0:
+            ax.scatter(g3[:, i], g3[:, j], c=COLORS["G3"],
+                       marker="o", s=15, alpha=0.6, zorder=2, label="G3")
+        ax.set_xlabel(xlabel, fontsize=8)
+        ax.set_ylabel(ylabel, fontsize=8)
+
+    axes[0].set_title("G2 vs G3: 3D Projection (f1/f2/f3)")
+    legend_handles = [
+        plt.Line2D([0], [0], marker="^", color="w", markerfacecolor=COLORS["G2"],
+                   markeredgecolor=COLORS["G2"], markersize=6, label="G2 (R-NSGA-II, 3-obj)"),
+        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=COLORS["G3"],
+                   markeredgecolor=COLORS["G3"], markersize=6, label="G3 (R-NSGA-II+KG, 4-obj)"),
+    ]
+    fig.legend(handles=legend_handles, loc="center right",
+               bbox_to_anchor=(1.0, 0.5), frameon=True, title="Algorithm")
+
+    out_path = out_dir / "fig6_g2_vs_g3_3d.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Fig 7: 식문화별 KG 메뉴 수 vs f4 산점도 ──────────────────────────────────
+
+def fig7_cuisine_coverage(out_dir: Path) -> None:
+    csv_path = _RESULTS / "step2_cuisine" / "cuisine_summary.csv"
+    apply_style()
+
+    if not csv_path.exists():
+        _placeholder(out_dir / "fig7_cuisine_coverage.png", "fig7: cuisine_summary.csv not found")
+        return
+
+    df = pd.read_csv(csv_path)
+    df["cuisine_en"] = df.cuisine.map(CUISINE_MAP)
+
+    fig, ax = plt.subplots(figsize=(SINGLE_W * 1.4, 3.0))
+    fig.subplots_adjust(right=0.72)
+
+    for _, row in df.iterrows():
+        cuisine_en = row["cuisine_en"]
+        ax.scatter(row["kg_menu_count"], row["loop_b_f4_mean"],
+                   color=CUISINE_COLORS.get(cuisine_en, "gray"),
+                   s=70, zorder=3, label=cuisine_en)
+        ax.annotate(cuisine_en, (row["kg_menu_count"], row["loop_b_f4_mean"]),
+                    fontsize=7, xytext=(6, 3), textcoords="offset points")
+
+    # 추세선
+    if len(df) > 2:
+        xs = df["kg_menu_count"].values
+        ys = df["loop_b_f4_mean"].values
+        z = np.polyfit(xs, ys, 1)
+        p_poly = np.poly1d(z)
+        x_line = np.linspace(xs.min(), xs.max(), 100)
+        ax.plot(x_line, p_poly(x_line), "k--", linewidth=0.8, alpha=0.5, label="Trend")
+
+    ax.set_xlabel("KG Menu Count")
+    ax.set_ylabel("Mean f4 (Loop B)")
+    ax.set_title("Cuisine Coverage vs KG Personalization Quality")
+
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, loc="upper left", bbox_to_anchor=(1.02, 1.0),
+              frameon=True, title="Cuisine")
+
+    out_path = out_dir / "fig7_cuisine_coverage.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Fig 8: 식문화 5종 G3 IGD+ 비교 ───────────────────────────────────────────
+
+def fig8_cuisine_metrics(out_dir: Path) -> None:
+    apply_style()
+    data = {}
+    for cuisine_kr, cuisine_en in CUISINE_MAP.items():
+        p = _RESULTS / "step2_cuisine" / cuisine_kr / "per_run_metrics.csv"
+        if p.exists():
+            df = pd.read_csv(p)
+            g3 = df[df.group == "G3"]["IGD+"].dropna().values
+            if len(g3) > 0:
+                data[cuisine_en] = g3
+
+    if not data:
+        _placeholder(out_dir / "fig8_cuisine_metrics.png", "fig8: no per_run data")
+        return
+
+    fig, ax = plt.subplots(figsize=(SINGLE_W * 1.6, 3.0))
+    fig.subplots_adjust(right=0.72)
+
+    cuisines = list(data.keys())
+    positions = range(1, len(cuisines) + 1)
+    bp = ax.boxplot(
+        [data[c] for c in cuisines],
+        positions=list(positions),
+        patch_artist=True,
+        widths=0.5,
+        medianprops=dict(color="black", linewidth=1.5),
+        whiskerprops=dict(linewidth=0.8),
+        capprops=dict(linewidth=0.8),
+        flierprops=dict(marker="o", markersize=3, alpha=0.5),
+    )
+    for patch, cuisine in zip(bp["boxes"], cuisines):
+        patch.set_facecolor(CUISINE_COLORS[cuisine])
+        patch.set_alpha(0.7)
+
+    ax.set_xticks(list(positions))
+    ax.set_xticklabels(cuisines, rotation=15, ha="right")
+    ax.set_ylabel("IGD+ (G3)")
+    ax.set_title("G3 IGD+ by Cuisine Type")
+
+    legend_handles = [
+        mpatches.Patch(facecolor=CUISINE_COLORS[c], alpha=0.7, label=c) for c in cuisines
+    ]
+    ax.legend(handles=legend_handles, loc="upper left",
+              bbox_to_anchor=(1.02, 1.0), frameon=True, title="Cuisine")
+
+    out_path = out_dir / "fig8_cuisine_metrics.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Sec 4: 수식·파라미터 표 ───────────────────────────────────────────────────
+
+def sec4_formula_objectives(out_dir: Path) -> None:
+    """4목적함수 수식 PNG — 전체 합본 + 개별 f1~f4 파일."""
+    apply_style()
+
+    # ── 개별 f1~f4 파일 ─────────────────────────────────────────────────────
+    individual = [
+        (
+            "formula_f1.png",
+            r"$f_1 = \left|\dfrac{C_{rec} - C^*}{C^*}\right|$",
+            r"Calorie error    ($C^* = 2000$ kcal)",
+        ),
+        (
+            "formula_f2.png",
+            r"$f_2 = \dfrac{1}{3}\sum_{m}\left|r_m^{rec} - r_m^*\right|,"
+            r"\quad m \in \{carb,\ prot,\ fat\}$",
+            r"Macronutrient ratio error",
+        ),
+        (
+            "formula_f3.png",
+            r"$f_3 = \left|\dfrac{P_{rec} - P^*}{P^*}\right|$",
+            r"Price error    ($P^* = 8{,}000$ KRW)",
+        ),
+        (
+            "formula_f4.png",
+            r"$f_4 = 1 - \dfrac{1}{|M|}\sum_{i \in M} S_i$",
+            r"KG preference error    ($S_i = p_i \cdot e^{-\lambda \Delta t_i}$)",
+        ),
+    ]
+
+    for fname, formula, caption in individual:
+        fig, ax = plt.subplots(figsize=(DOUBLE_W * 0.85, 1.4))
+        ax.axis("off")
+        ax.text(0.5, 0.62, formula, transform=ax.transAxes,
+                fontsize=13, va="center", ha="center")
+        ax.text(0.5, 0.18, caption, transform=ax.transAxes,
+                fontsize=9, va="center", ha="center", color="#444444")
+        out_path = out_dir / fname
+        fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+        plt.close(fig)
+        print(f"  saved → {out_path.name}")
+
+    # ── 전체 합본 (formula_objectives.png) ────────────────────────────────
+    fig, ax = plt.subplots(figsize=(DOUBLE_W, 2.2))
+    ax.axis("off")
+
+    lines = [
+        r"$f_1 = \left|\frac{C_{rec} - C^*}{C^*}\right|$"
+        r"     (Calorie error, $C^*=2000$ kcal)",
+        r"$f_2 = \frac{1}{3}\sum_{m \in \{carb,prot,fat\}} \left|r_m^{rec} - r_m^*\right|$"
+        r"     (Macronutrient ratio error)",
+        r"$f_3 = \left|\frac{P_{rec} - P^*}{P^*}\right|$"
+        r"     (Price error, $P^*=8000$ KRW)",
+        r"$f_4 = 1 - \frac{1}{|M|}\sum_{i \in M} S_i$"
+        r"     (KG preference error,  $S_i = p_i \cdot e^{-\lambda \Delta t_i}$)",
+    ]
+    for k, line in enumerate(lines):
+        ax.text(0.02, 0.88 - k * 0.22, line, transform=ax.transAxes,
+                fontsize=10, va="top", ha="left")
+
+    ax.set_title("Objective Functions ($f_1$–$f_4$)", fontsize=11, pad=8)
+    out_path = out_dir / "formula_objectives.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+def sec4_formula_kg_decay(out_dir: Path) -> None:
+    """KG 시간감쇠 수식 PNG."""
+    apply_style()
+    fig, ax = plt.subplots(figsize=(SINGLE_W * 1.8, 1.6))
+    ax.axis("off")
+
+    lines = [
+        r"$D_{time} = e^{-\lambda \cdot \Delta t}$"
+        r"     (time decay,  $\lambda=0.5$,  $\Delta t$ in days)",
+        r"$S_i = p_i \cdot (1 - D_i)$"
+        r"     (KG score,  $p_i$: preference weight)",
+    ]
+    for k, line in enumerate(lines):
+        ax.text(0.02, 0.78 - k * 0.38, line, transform=ax.transAxes,
+                fontsize=10, va="top", ha="left")
+
+    ax.set_title("KG Time-Decay Personalization", fontsize=11, pad=8)
+    out_path = out_dir / "formula_kg_decay.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+def sec4_table_model_params(out_dir: Path) -> None:
+    """G1/G2/G3 파라미터 비교 표 PNG."""
+    apply_style()
+
+    rows = [
+        ["Population",       "200",           "200",                    "200"],
+        ["Generations",      "200",           "200",                    "200"],
+        ["Objectives",       "3 (f1,f2,f3)",  "3 (f1,f2,f3)",           "4 (f1,f2,f3,f4)"],
+        ["Reference points", "—",             "[[0,0,0]]",              "[[0,0,0,0]]"],
+        ["Crossover",        "2-pt (p=0.9)",  "2-pt (p=0.9)",           "2-pt (p=0.9)"],
+        ["Mutation",         "PM (p=1/n)",    "PM (p=1/n)",             "PM (p=1/n)"],
+        ["KG integration",   "✗",             "✗ (fixed KG score)",     "✓ (dynamic f4)"],
+    ]
+    col_labels = ["Parameter", "G1 (NSGA-II)", "G2 (R-NSGA-II)", "G3 (R-NSGA-II+KG)"]
+
+    fig, ax = plt.subplots(figsize=(DOUBLE_W, 2.6))
+    ax.axis("off")
+
+    tbl = ax.table(
+        cellText=rows,
+        colLabels=col_labels,
+        loc="center",
+        cellLoc="center",
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8.5)
+    tbl.scale(1, 1.45)
+
+    # 헤더 색상
+    for j in range(len(col_labels)):
+        tbl[0, j].set_facecolor("#2c3e50")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    # 짝수행 음영
+    for i in range(1, len(rows) + 1):
+        if i % 2 == 0:
+            for j in range(len(col_labels)):
+                tbl[i, j].set_facecolor("#f2f2f2")
+
+    ax.set_title("Algorithm Parameter Comparison", fontsize=11, pad=6)
+    out_path = out_dir / "table_model_params.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Sec 5: 실험 설계 표 ───────────────────────────────────────────────────────
+
+def sec5_table_experiment_design(out_dir: Path) -> None:
+    """실험 시나리오 요약 표 PNG."""
+    apply_style()
+
+    rows = [
+        ["Loop A",  "G1/G2/G3 Algorithm\nComparison",
+         "All cuisines\n(3,358 items)",   "30 runs\n(seed 42–71)",   "HV, GD+,\nIGD+"],
+        ["Loop B",  "G3 7-Day KG\nDynamic Update",
+         "All cuisines",                  "1 run/day\n× 7 days",     "f4 trend,\ndup. rate"],
+        ["Loop A′", "Cuisine-specific\nG3 Evaluation",
+         "Per cuisine pool\n(5 types)",   "30 runs\n(seed 42–71)",   "HV, GD+,\nIGD+, f4"],
+        ["Cold\nStart", "KG Init\nComparison",
+         "All cuisines",                  "1 run/day\n× 7 days",     "f4 before\nvs after"],
+    ]
+    col_labels = ["Scenario", "Purpose", "Data Pool", "Runs", "Metrics"]
+
+    # col widths as fractions of total axes width
+    col_widths = [0.10, 0.24, 0.24, 0.20, 0.18]
+
+    fig, ax = plt.subplots(figsize=(DOUBLE_W, 3.0))
+    ax.axis("off")
+
+    tbl = ax.table(
+        cellText=rows,
+        colLabels=col_labels,
+        colWidths=col_widths,
+        loc="center",
+        cellLoc="center",
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8)
+    tbl.scale(1, 2.1)
+
+    for j in range(len(col_labels)):
+        tbl[0, j].set_facecolor("#2c3e50")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    for i in range(1, len(rows) + 1):
+        if i % 2 == 0:
+            for j in range(len(col_labels)):
+                tbl[i, j].set_facecolor("#f2f2f2")
+
+    ax.set_title("Experimental Scenarios", fontsize=11, pad=6)
+    out_path = out_dir / "table_experiment_design.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── 플레이스홀더 (데이터 없을 때) ──────────────────────────────────────────────
+
+def _placeholder(path: Path, msg: str) -> None:
+    fig, ax = plt.subplots(figsize=(4, 2))
+    ax.text(0.5, 0.5, msg, ha="center", va="center",
+            transform=ax.transAxes, fontsize=9, color="gray",
+            bbox=dict(boxstyle="round", fc="lightyellow", ec="gray"))
+    ax.axis("off")
+    fig.savefig(path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  placeholder → {path.name}")
+
+
+# ── KG 시각화 복사 ────────────────────────────────────────────────────────────
+
+def copy_kg_viz(out_dir: Path) -> None:
+    src = _RESULTS / "step2_cuisine" / "plot_kg_visualization.png"
+    if src.exists():
+        dst = out_dir / "plot_kg_visualization.png"
+        shutil.copy2(src, dst)
+        print(f"  copied → {dst.name}")
+    else:
+        print("  WARNING: plot_kg_visualization.png not found")
+
+
+# ── 메인 ──────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sample", action="store_true",
+                        help="fig1만 생성 (스타일 확인용)")
+    parser.add_argument("--all", action="store_true",
+                        help="전체 그림 생성")
+    args = parser.parse_args()
+
+    if not args.sample and not args.all:
+        parser.print_help()
+        return
+
+    sec4 = _OUT / "sec4_formulas"
+    sec5 = _OUT / "sec5_experiment"
+    sec6 = _OUT / "sec6_results"
+    for d in (sec4, sec5, sec6):
+        d.mkdir(parents=True, exist_ok=True)
+
+    print("\n=== paper_figures 생성 ===")
+
+    if args.sample or args.all:
+        print("\n[Fig 1] G1 vs G2 boxplot (sample)")
+        fig1_g1_g2_boxplot(sec6)
+
+    if args.all:
+        print("\n[Sec4] 목적함수 수식")
+        sec4_formula_objectives(sec4)
+        print("\n[Sec4] KG 시간감쇠 수식")
+        sec4_formula_kg_decay(sec4)
+        print("\n[Sec4] 모델 파라미터 표")
+        sec4_table_model_params(sec4)
+        print("\n[Sec5] 실험 설계 표")
+        sec5_table_experiment_design(sec5)
+        print("\n[Fig 2] HV convergence curve")
+        fig2_convergence(sec6)
+        print("\n[Fig 3] Pareto scatter (3D)")
+        fig3_pareto_scatter(sec6)
+        print("\n[Fig 4] Cold start f4")
+        fig4_coldstart(sec6)
+        print("\n[Fig 5] 7-day f4 trend")
+        fig5_7days_f4(sec6)
+        print("\n[Fig 6] G2 vs G3 3D projection")
+        fig6_g2_vs_g3_3d(sec6)
+        print("\n[Fig 7] Cuisine coverage scatter")
+        fig7_cuisine_coverage(sec6)
+        print("\n[Fig 8] Cuisine G3 IGD+")
+        fig8_cuisine_metrics(sec6)
+        print("\n[KG viz] Copy existing")
+        copy_kg_viz(sec6)
+
+    print(f"\n완료: {_OUT}")
+
+
+if __name__ == "__main__":
+    main()
