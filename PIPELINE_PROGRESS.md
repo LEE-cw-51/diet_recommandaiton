@@ -13,8 +13,32 @@
 - **완료**: **experiment/ 구조 개편 — 계산/시각화/평가 분리 + 모듈화** ✅ (Session 22)
 - **완료**: **논문용 그림 전체 생성 + Loop B 7일 실험** ✅ (Session 23, PR #28)
 - **완료**: **논문 Sec 4~6 스토리보드 문서 작성** ✅ (Session 24, PR #29 예정)
-- **다음 작업**: 스토리보드 기반으로 Sec 4~6 본문(마크다운 초안) 작성
-- 마지막 업데이트: 2026-05-31 (Session 24, 논문 스토리보드)
+- **완료**: **논문 Sec 1~2 스토리보드 문서 작성 + 그림 2종 생성** ✅ (Session 26)
+- **다음 작업**: 스토리보드(Sec 1~6) 기반으로 논문 본문(마크다운 초안) 작성
+- 마지막 업데이트: 2026-05-31 (Session 26, 논문 Sec 1~2 스토리보드)
+
+## Session 26 완료 내용 (2026-05-31)
+
+### 논문 Sec 1~2 스토리보드 문서 작성 + 그림 2종 생성
+
+**목표:** Sec 1(서론)과 Sec 2(이론적 배경) 스토리보드 확정 및 그림 생성.
+
+**산출물:**
+- `docs/storyboard_sec1_2.md` 신규 생성 (Sec 1: 1.1~1.4, Sec 2: 2.1~2.5)
+- `experiment/results/paper_figures/sec1_intro/fig0_system_overview.png` (시스템 개요 블록 다이어그램)
+- `experiment/results/paper_figures/sec2_theory/fig_kg_concept.png` (KG 삼중항 개념도)
+- `experiment/visualization/paper_figures.py` — `--sec1` / `--sec2` 플래그 추가
+
+**인용 근거 검증 결과:**
+- ~~Wansink & Sobal (2007)~~ 사용 불가 (연구 부정직 스캔들) → 2020 한국인 영양소 섭취기준 + KNHANES 2023으로 대체
+- ~~Das & Dennis (1998)~~ R-NSGA-II 아님 → Deb & Sundar (2006) GECCO '06, DOI:10.1145/1143997.1144112로 교정
+- WHO 2025 지침 존재하지 않음 → 한국 공식 지침(보건복지부/질병관리청)으로 대체
+
+**서론 구조 확정:**
+- 1.1: 영양 불균형 사회적 배경 (KNHANES 2023, 한국인 영양소 섭취기준 2020)
+- 1.2: 기존 서비스의 사용 피로감 (수동 입력·단일 기준 추천의 한계)
+- 1.3: 연구 목적·기여 3항목 + 학술 차별점 (fig0_system_overview.png)
+- 1.4: 논문 구성
 
 ## Session 24 완료 내용 (2026-05-31)
 
