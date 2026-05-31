@@ -1,5 +1,15 @@
 # 논문 그림 목록
 
+## Sec3 — 데이터 수집 및 정제
+
+| 파일 | 설명 |
+|------|------|
+| [sec3_data/table_data_pipeline.png](sec3_data/table_data_pipeline.png) | 데이터 수집·정제 파이프라인 개요: Step 0~6 단계별 처리 내용·도구·입출력 행수 |
+| [sec3_data/table_franchise_sources.png](sec3_data/table_franchise_sources.png) | 프랜차이즈 7개 브랜드 데이터 수집 개요: 수집 방법·항목 수·가격·알레르기 출처 |
+| [sec3_data/table_category_criteria.png](sec3_data/table_category_criteria.png) | 5-class 식사 카테고리 분류 기준표: NFIS·식약처·HACCP 기반 정의·영양특성·예시 |
+| [sec3_data/fig_dataset_distribution.png](sec3_data/fig_dataset_distribution.png) | food_master 3,358건의 (a) 카테고리 분포 및 (b) 식문화 분포 |
+| [sec3_data/table_price_outlier.png](sec3_data/table_price_outlier.png) | 카테고리별 Tukey's Fence (IQR×1.5) 이상치 처리 결과: HIGH 126개 + LOW 16개 → NULL |
+
 ## Sec4 — 수식 & 표
 
 | 파일 | 설명 |
