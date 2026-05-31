@@ -11,6 +11,7 @@
 
 사용법:
   python -X utf8 -m experiment.visualization.paper_figures --sample   # fig1만 생성
+  python -X utf8 -m experiment.visualization.paper_figures --sec3     # Sec 3 그림만 생성
   python -X utf8 -m experiment.visualization.paper_figures --all      # 전체 생성
 """
 from __future__ import annotations
@@ -724,6 +725,287 @@ def sec5_table_experiment_design(out_dir: Path) -> None:
     print(f"  saved → {out_path.name}")
 
 
+# ── Sec 3: 데이터 수집 및 정제 ───────────────────────────────────────────────
+
+
+def sec3_pipeline_table(out_dir: Path) -> None:
+    """데이터 수집·정제 파이프라인 전체 개요 표 PNG."""
+    apply_style()
+
+    rows = [
+        ["Step 0",    "food_research_sample\n→ food_master BULK COPY",
+         "Supabase",          "2,524",  "2,522",  "Dedup by\nproduct+brand"],
+        ["Step 0b",   "Franchise CSV\n→ food_master INSERT",
+         "Gemini 2.5F",       "871",    "850",    "Allergen 22-type\nJSONB parse"],
+        ["Step 1/1b", "Naver Shopping API\n+ HACCP API → price/allergen",
+         "Naver API\nGemini 2.5F", "2,522", "2,520", "price + allergens\nUPDATE"],
+        ["Step 1c",   "Franchise price re-query\n(Naver webkr → Gemini)",
+         "Naver API\nGemini 2.5F", "846",   "564",   "price UPDATE\n(re-verified)"],
+        ["Step 2",    "LLM meal category\nclassification (5-class)",
+         "Gemini 2.5F",       "3,372",  "3,372",  "category_type\n(MAIN/SOUP/SIDE\n/DRINK/SNACK)"],
+        ["Step 2b",   "Remove low-quality\nnutrition rows",
+         "SQL",               "3,372",  "3,358",  "calories<5 etc.\n14 rows deleted"],
+        ["Step 2c",   "Price outlier treatment\n(Tukey IQR×1.5)",
+         "SQL",               "3,358",  "3,358",  "142 rows → NULL\n(LOW 16 + HIGH 126)"],
+        ["Step 6",    "Cuisine classification\n(7-class)",
+         "Gemini 3.1F",       "2,183",  "2,183",  "cuisine_type\n(Korean/Western/…)"],
+    ]
+    col_labels = ["Step", "Process", "Tool", "Input\n(rows)", "Output\n(rows)", "Transform"]
+
+    col_widths = [0.09, 0.26, 0.16, 0.09, 0.09, 0.24]
+
+    fig, ax = plt.subplots(figsize=(DOUBLE_W * 1.1, 4.2))
+    ax.axis("off")
+
+    tbl = ax.table(
+        cellText=rows,
+        colLabels=col_labels,
+        colWidths=col_widths,
+        loc="center",
+        cellLoc="center",
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(7.5)
+    tbl.scale(1, 2.3)
+
+    for j in range(len(col_labels)):
+        tbl[0, j].set_facecolor("#2c3e50")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    for i in range(1, len(rows) + 1):
+        if i % 2 == 0:
+            for j in range(len(col_labels)):
+                tbl[i, j].set_facecolor("#f2f2f2")
+
+    ax.set_title("Data Collection & Preprocessing Pipeline", fontsize=11, pad=6)
+    out_path = out_dir / "table_data_pipeline.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+def sec3_franchise_table(out_dir: Path) -> None:
+    """프랜차이즈 6개사 데이터 수집 개요 표 PNG."""
+    apply_style()
+
+    rows = [
+        ["McDonald's",  "HTML crawl",    "~90",   "Naver Shopping API",  "HACCP API"],
+        ["Lotteria",    "HTML crawl",    "~70",   "Naver Shopping API",  "HACCP API"],
+        ["Burger King", "CSV (manual)",  "~100",  "Naver Shopping API",  "HACCP API"],
+        ["MomsTouсh",  "Excel crawl",   "~80",   "Naver Shopping API",  "HACCP API"],
+        ["Subway",      "Excel crawl",   "~60",   "Naver Shopping API",  "HACCP API"],
+        ["Salady",      "Excel crawl",   "~50",   "Naver Shopping API",  "HACCP API"],
+        ["Preps",       "Excel crawl",   "~50",   "Naver Shopping API",  "HACCP API"],
+    ]
+    col_labels = ["Brand", "Collect Method", "Items", "Price Source", "Allergen Source"]
+    col_widths = [0.16, 0.20, 0.10, 0.28, 0.22]
+
+    fig, ax = plt.subplots(figsize=(DOUBLE_W, 2.8))
+    ax.axis("off")
+
+    tbl = ax.table(
+        cellText=rows,
+        colLabels=col_labels,
+        colWidths=col_widths,
+        loc="center",
+        cellLoc="center",
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8)
+    tbl.scale(1, 1.8)
+
+    for j in range(len(col_labels)):
+        tbl[0, j].set_facecolor("#2c3e50")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    for i in range(1, len(rows) + 1):
+        if i % 2 == 0:
+            for j in range(len(col_labels)):
+                tbl[i, j].set_facecolor("#f2f2f2")
+
+    ax.set_title("Franchise Data Collection Overview (7 Brands, ~500 items)", fontsize=11, pad=6)
+    out_path = out_dir / "table_franchise_sources.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+def sec3_category_criteria(out_dir: Path) -> None:
+    """5-카테고리 분류 기준 표 PNG."""
+    apply_style()
+
+    rows = [
+        ["MAIN",  "Primary carbohydrate\nsource (staple food)",
+         "High carbs\nLow~mid sodium",
+         "Rice, Gimbap, Sandwich,\nPasta, Lunch box"],
+        ["SOUP",  "Broth-based dishes\n(soup / stew / porridge)",
+         "Very high sodium\nBroth + solid mixed",
+         "Doenjang-jjigae, Miyeok-guk,\nRamen, Seolleongtang"],
+        ["SIDE",  "Side dishes\n(banchan, no broth)",
+         "Mid sodium\nLow carbs",
+         "Namul, Grilled items,\nSalad, Kimchi, Jeon"],
+        ["DRINK", "Liquid beverages\n(no solid content)",
+         "Low calorie\nWater-based",
+         "Water, Juice, Coffee,\nMilk, Tea"],
+        ["SNACK", "Snacks & desserts",
+         "Mid calorie\nMay be high sugar",
+         "Chips, Cake,\nNuts, Protein bar"],
+    ]
+    col_labels = ["Category", "Definition", "Nutritional Profile", "Examples"]
+    col_widths = [0.12, 0.23, 0.27, 0.34]
+
+    fig, ax = plt.subplots(figsize=(DOUBLE_W * 1.05, 3.2))
+    ax.axis("off")
+
+    tbl = ax.table(
+        cellText=rows,
+        colLabels=col_labels,
+        colWidths=col_widths,
+        loc="center",
+        cellLoc="center",
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8)
+    tbl.scale(1, 2.1)
+
+    cat_colors = {
+        "MAIN":  "#d4e6f1",
+        "SOUP":  "#fadbd8",
+        "SIDE":  "#d5f5e3",
+        "DRINK": "#fef9e7",
+        "SNACK": "#f5eef8",
+    }
+    for j in range(len(col_labels)):
+        tbl[0, j].set_facecolor("#2c3e50")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    for i, row in enumerate(rows, start=1):
+        cat = row[0]
+        color = cat_colors.get(cat, "#f2f2f2")
+        tbl[i, 0].set_facecolor(color)
+        tbl[i, 0].set_text_props(fontweight="bold")
+
+    ax.set_title(
+        "5-Class Meal Category Criteria\n(Based on NFIS, MFDS & HACCP Standards)",
+        fontsize=10, pad=6,
+    )
+    out_path = out_dir / "table_category_criteria.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+def sec3_distribution_chart(out_dir: Path) -> None:
+    """food_master 카테고리·식문화 분포 서브피겨 PNG."""
+    apply_style()
+
+    cat_data = {
+        "SNACK": 1101,
+        "MAIN":   957,
+        "SIDE":   688,
+        "DRINK":  441,
+        "SOUP":   171,
+    }
+    cuisine_data = {
+        "Korean":   663,
+        "Café":     525,
+        "Western":  448,
+        "Other":    386,
+        "Bunsik":    90,
+        "Chinese":   33,
+        "Japanese":  31,
+    }
+
+    cat_colors_list = ["#9467bd", "#1f77b4", "#2ca02c", "#ff7f0e", "#d62728"]
+    cuisine_colors_list = [
+        "#1f77b4", "#8c564b", "#ff7f0e", "#7f7f7f",
+        "#2ca02c", "#d62728", "#9467bd",
+    ]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(DOUBLE_W, 3.2))
+    fig.subplots_adjust(wspace=0.38)
+
+    # (a) 카테고리 분포
+    cats = list(cat_data.keys())
+    cat_vals = list(cat_data.values())
+    bars1 = ax1.barh(cats, cat_vals, color=cat_colors_list, edgecolor="white", height=0.6)
+    for bar, val in zip(bars1, cat_vals):
+        ax1.text(bar.get_width() + 15, bar.get_y() + bar.get_height() / 2,
+                 str(val), va="center", fontsize=8)
+    ax1.set_xlabel("Item Count")
+    ax1.set_title("(a) Category Distribution")
+    ax1.set_xlim(0, max(cat_vals) * 1.18)
+    ax1.invert_yaxis()
+
+    # (b) 식문화 분포
+    cuisines = list(cuisine_data.keys())
+    cuisine_vals = list(cuisine_data.values())
+    bars2 = ax2.barh(cuisines, cuisine_vals, color=cuisine_colors_list, edgecolor="white", height=0.6)
+    for bar, val in zip(bars2, cuisine_vals):
+        ax2.text(bar.get_width() + 10, bar.get_y() + bar.get_height() / 2,
+                 str(val), va="center", fontsize=8)
+    ax2.set_xlabel("Item Count")
+    ax2.set_title("(b) Cuisine Distribution\n(price-tagged items, n=2,183)")
+    ax2.set_xlim(0, max(cuisine_vals) * 1.22)
+    ax2.invert_yaxis()
+
+    fig.suptitle("food_master Dataset Distribution (total 3,358 items)", fontsize=11, y=1.02)
+    out_path = out_dir / "fig_dataset_distribution.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+def sec3_price_outlier_table(out_dir: Path) -> None:
+    """Tukey IQR 가격 이상치 처리 결과 표 PNG."""
+    apply_style()
+
+    rows = [
+        ["MAIN",   "500",  "24,625",  "23",  "23"],
+        ["SOUP",   "500",  "43,830",  "13",  "13"],
+        ["SIDE",   "500",  "35,250",  "24",  "24"],
+        ["DRINK",  "500",  "53,500",  "27",  "27"],
+        ["SNACK",  "500",  "39,965",  "39",  "39"],
+        ["ALL",    "500",  "—",       "126", "16 (LOW) + 126 (HIGH)"],
+    ]
+    col_labels = ["Category", "Lower Fence\n(KRW)", "Upper Fence\n(KRW)",
+                  "HIGH outliers", "Treated as NULL"]
+    col_widths = [0.14, 0.18, 0.18, 0.16, 0.32]
+
+    fig, ax = plt.subplots(figsize=(DOUBLE_W, 2.6))
+    ax.axis("off")
+
+    tbl = ax.table(
+        cellText=rows,
+        colLabels=col_labels,
+        colWidths=col_widths,
+        loc="center",
+        cellLoc="center",
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8.5)
+    tbl.scale(1, 1.8)
+
+    for j in range(len(col_labels)):
+        tbl[0, j].set_facecolor("#2c3e50")
+        tbl[0, j].set_text_props(color="white", fontweight="bold")
+    # 마지막 행(ALL) 강조
+    for j in range(len(col_labels)):
+        tbl[len(rows), j].set_facecolor("#eaf2ff")
+        tbl[len(rows), j].set_text_props(fontweight="bold")
+    for i in range(1, len(rows)):
+        if i % 2 == 0:
+            for j in range(len(col_labels)):
+                tbl[i, j].set_facecolor("#f2f2f2")
+
+    ax.set_title(
+        "Price Outlier Treatment: Tukey's Fence (IQR × 1.5) per Category\n"
+        "(Lower fence fixed at 500 KRW; 142 items → NULL)",
+        fontsize=10, pad=6,
+    )
+    out_path = out_dir / "table_price_outlier.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
 # ── 플레이스홀더 (데이터 없을 때) ──────────────────────────────────────────────
 
 def _placeholder(path: Path, msg: str) -> None:
@@ -755,21 +1037,36 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sample", action="store_true",
                         help="fig1만 생성 (스타일 확인용)")
+    parser.add_argument("--sec3", action="store_true",
+                        help="Sec 3 데이터 그림만 생성")
     parser.add_argument("--all", action="store_true",
                         help="전체 그림 생성")
     args = parser.parse_args()
 
-    if not args.sample and not args.all:
+    if not args.sample and not args.sec3 and not args.all:
         parser.print_help()
         return
 
+    sec3 = _OUT / "sec3_data"
     sec4 = _OUT / "sec4_formulas"
     sec5 = _OUT / "sec5_experiment"
     sec6 = _OUT / "sec6_results"
-    for d in (sec4, sec5, sec6):
+    for d in (sec3, sec4, sec5, sec6):
         d.mkdir(parents=True, exist_ok=True)
 
     print("\n=== paper_figures 생성 ===")
+
+    if args.sec3 or args.all:
+        print("\n[Sec3] 데이터 파이프라인 표")
+        sec3_pipeline_table(sec3)
+        print("\n[Sec3] 프랜차이즈 출처 표")
+        sec3_franchise_table(sec3)
+        print("\n[Sec3] 카테고리 분류 기준 표")
+        sec3_category_criteria(sec3)
+        print("\n[Sec3] 카테고리·식문화 분포 차트")
+        sec3_distribution_chart(sec3)
+        print("\n[Sec3] 가격 이상치 처리 표")
+        sec3_price_outlier_table(sec3)
 
     if args.sample or args.all:
         print("\n[Fig 1] G1 vs G2 boxplot (sample)")
