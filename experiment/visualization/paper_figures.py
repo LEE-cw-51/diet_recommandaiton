@@ -11,6 +11,8 @@
 
 사용법:
   python -X utf8 -m experiment.visualization.paper_figures --sample   # fig1만 생성
+  python -X utf8 -m experiment.visualization.paper_figures --sec1     # Sec 1 그림만 생성
+  python -X utf8 -m experiment.visualization.paper_figures --sec2     # Sec 2 그림만 생성
   python -X utf8 -m experiment.visualization.paper_figures --sec3     # Sec 3 그림만 생성
   python -X utf8 -m experiment.visualization.paper_figures --all      # 전체 생성
 """
@@ -725,6 +727,179 @@ def sec5_table_experiment_design(out_dir: Path) -> None:
     print(f"  saved → {out_path.name}")
 
 
+# ── Sec 1: 시스템 개요도 ──────────────────────────────────────────────────────
+
+def sec1_system_overview(out_dir: Path) -> None:
+    """시스템 전체 아키텍처 블록 다이어그램 PNG (fig0_system_overview.png)."""
+    apply_style()
+
+    fig, ax = plt.subplots(figsize=(DOUBLE_W * 1.1, 3.6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 4)
+    ax.axis("off")
+
+    # 블록 정의: (x_center, y_center, width, height, label_main, label_sub, facecolor)
+    blocks = [
+        (1.0, 2.0, 1.6, 1.2,
+         "User Input",
+         "Preferences\nAllergies / Budget",
+         "#d4e6f1"),
+        (3.1, 2.0, 1.6, 1.2,
+         "food_master DB",
+         "3,358 items\n(MFDS + Franchise)",
+         "#d5f5e3"),
+        (5.2, 2.0, 1.6, 1.2,
+         "Knowledge Graph",
+         "Preference weights\nTime decay (λ=0.5)",
+         "#fdebd0"),
+        (7.3, 2.0, 1.6, 1.2,
+         "R-NSGA-II",
+         "4 objectives\nf1  f2  f3  f4",
+         "#fadbd8"),
+        (9.2, 2.0, 1.4, 1.2,
+         "Daily Meal",
+         "Pareto-optimal\nrecommendation",
+         "#e8daef"),
+    ]
+
+    # 목적함수 라벨 (최적화 블록 아래)
+    obj_labels = ["f1: Calorie", "f2: Macros", "f3: Price", "f4: KG pref."]
+
+    for xc, yc, w, h, label_main, label_sub, fc in blocks:
+        rect = mpatches.FancyBboxPatch(
+            (xc - w / 2, yc - h / 2), w, h,
+            boxstyle="round,pad=0.05",
+            facecolor=fc, edgecolor="#555555", linewidth=1.0,
+        )
+        ax.add_patch(rect)
+        ax.text(xc, yc + 0.18, label_main, ha="center", va="center",
+                fontsize=8.5, fontweight="bold")
+        ax.text(xc, yc - 0.20, label_sub, ha="center", va="center",
+                fontsize=7.2, color="#333333", linespacing=1.4)
+
+    # 화살표 연결
+    arrow_props = dict(arrowstyle="-|>", color="#444444", lw=1.2)
+    xs = [b[0] for b in blocks]
+    widths = [b[2] for b in blocks]
+    for i in range(len(blocks) - 1):
+        x_start = xs[i] + widths[i] / 2
+        x_end   = xs[i + 1] - widths[i + 1] / 2
+        ax.annotate("", xy=(x_end, 2.0), xytext=(x_start, 2.0),
+                    arrowprops=arrow_props)
+
+    # KG ↔ R-NSGA-II 양방향 피드백 (KG 동적 갱신 표현)
+    ax.annotate("", xy=(5.2 + 0.8, 2.0 - 0.5), xytext=(7.3 - 0.8, 2.0 - 0.5),
+                arrowprops=dict(arrowstyle="-|>", color="#888888", lw=0.8,
+                                connectionstyle="arc3,rad=-0.35"))
+    ax.text(6.25, 1.05, "daily update", ha="center", fontsize=6.5, color="#666666",
+            style="italic")
+
+    # 목적함수 라벨 (R-NSGA-II 블록 아래)
+    for k, lbl in enumerate(obj_labels):
+        ax.text(7.3 - 0.6 + k * 0.41, 1.25, lbl, ha="center", fontsize=5.8,
+                color="#555555")
+
+    ax.set_title("Proposed System Overview: KG + 4-Objective R-NSGA-II Daily Meal Recommendation",
+                 fontsize=10, pad=10)
+
+    out_path = out_dir / "fig0_system_overview.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
+# ── Sec 2: KG 개념도 ──────────────────────────────────────────────────────────
+
+def sec2_kg_concept(out_dir: Path) -> None:
+    """KG 삼중항 예시 — 소규모 노드·엣지 그래프 PNG (fig_kg_concept.png)."""
+    try:
+        import networkx as nx
+    except ImportError:
+        _placeholder(out_dir / "fig_kg_concept.png",
+                     "fig_kg_concept: install networkx\n(pip install networkx)")
+        return
+
+    apply_style()
+
+    G = nx.DiGraph()
+
+    # 노드 정의
+    nodes = {
+        "User A":       {"type": "user"},
+        "Doenjang-\njjigae": {"type": "food"},
+        "Bibimbap":     {"type": "food"},
+        "SOUP":         {"type": "category"},
+        "MAIN":         {"type": "category"},
+        "Korean":       {"type": "cuisine"},
+    }
+    for n in nodes:
+        G.add_node(n)
+
+    # 엣지 정의: (head, tail, label)
+    edges = [
+        ("User A",        "Doenjang-\njjigae", "ate (w=0.8)"),
+        ("User A",        "Bibimbap",           "ate (w=0.6)"),
+        ("Doenjang-\njjigae", "SOUP",           "category"),
+        ("Doenjang-\njjigae", "Korean",         "cuisine"),
+        ("Bibimbap",      "MAIN",               "category"),
+        ("Bibimbap",      "Korean",             "cuisine"),
+    ]
+    for h, t, lbl in edges:
+        G.add_edge(h, t, label=lbl)
+
+    # 레이아웃 — 수동 위치 지정
+    pos = {
+        "User A":           (0.5, 1.0),
+        "Doenjang-\njjigae": (0.15, 0.45),
+        "Bibimbap":         (0.85, 0.45),
+        "SOUP":             (0.0, 0.0),
+        "MAIN":             (1.0, 0.0),
+        "Korean":           (0.5, 0.0),
+    }
+
+    node_colors_map = {"user": "#aed6f1", "food": "#a9dfbf", "category": "#f9e79f",
+                       "cuisine": "#f5cba7"}
+    node_color = [node_colors_map[nodes[n]["type"]] for n in G.nodes()]
+    node_size  = [1200 if nodes[n]["type"] == "user" else 900 for n in G.nodes()]
+
+    fig, ax = plt.subplots(figsize=(DOUBLE_W * 0.75, 3.2))
+    ax.axis("off")
+
+    nx.draw_networkx_nodes(G, pos, ax=ax, node_color=node_color,
+                           node_size=node_size, edgecolors="#555555", linewidths=0.8)
+    nx.draw_networkx_labels(G, pos, ax=ax, font_size=7.5, font_weight="bold")
+    nx.draw_networkx_edges(G, pos, ax=ax,
+                           edge_color="#666666", arrows=True,
+                           arrowstyle="-|>", arrowsize=14,
+                           connectionstyle="arc3,rad=0.08",
+                           min_source_margin=18, min_target_margin=18,
+                           width=0.9)
+    edge_labels = {(h, t): lbl for h, t, lbl in edges}
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, ax=ax,
+                                 font_size=6.2, label_pos=0.45,
+                                 bbox=dict(boxstyle="round,pad=0.1",
+                                           fc="white", ec="none", alpha=0.8))
+
+    # 범례
+    legend_patches = [
+        mpatches.Patch(facecolor="#aed6f1", edgecolor="#555", label="User"),
+        mpatches.Patch(facecolor="#a9dfbf", edgecolor="#555", label="Food"),
+        mpatches.Patch(facecolor="#f9e79f", edgecolor="#555", label="Category"),
+        mpatches.Patch(facecolor="#f5cba7", edgecolor="#555", label="Cuisine"),
+    ]
+    ax.legend(handles=legend_patches, loc="lower right", fontsize=7,
+              frameon=True, title="Node Type", title_fontsize=7)
+
+    ax.set_title("Knowledge Graph Structure Example\n"
+                 "(User–Food interaction with preference weights)",
+                 fontsize=9, pad=8)
+
+    out_path = out_dir / "fig_kg_concept.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"  saved → {out_path.name}")
+
+
 # ── Sec 3: 데이터 수집 및 정제 ───────────────────────────────────────────────
 
 
@@ -1037,24 +1212,38 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sample", action="store_true",
                         help="fig1만 생성 (스타일 확인용)")
+    parser.add_argument("--sec1", action="store_true",
+                        help="Sec 1 시스템 개요도만 생성")
+    parser.add_argument("--sec2", action="store_true",
+                        help="Sec 2 KG 개념도만 생성")
     parser.add_argument("--sec3", action="store_true",
                         help="Sec 3 데이터 그림만 생성")
     parser.add_argument("--all", action="store_true",
                         help="전체 그림 생성")
     args = parser.parse_args()
 
-    if not args.sample and not args.sec3 and not args.all:
+    if not args.sample and not args.sec1 and not args.sec2 and not args.sec3 and not args.all:
         parser.print_help()
         return
 
+    sec1 = _OUT / "sec1_intro"
+    sec2 = _OUT / "sec2_theory"
     sec3 = _OUT / "sec3_data"
     sec4 = _OUT / "sec4_formulas"
     sec5 = _OUT / "sec5_experiment"
     sec6 = _OUT / "sec6_results"
-    for d in (sec3, sec4, sec5, sec6):
+    for d in (sec1, sec2, sec3, sec4, sec5, sec6):
         d.mkdir(parents=True, exist_ok=True)
 
     print("\n=== paper_figures 생성 ===")
+
+    if args.sec1 or args.all:
+        print("\n[Sec1] 시스템 개요도")
+        sec1_system_overview(sec1)
+
+    if args.sec2 or args.all:
+        print("\n[Sec2] KG 개념도")
+        sec2_kg_concept(sec2)
 
     if args.sec3 or args.all:
         print("\n[Sec3] 데이터 파이프라인 표")
