@@ -15,7 +15,7 @@
 
 ### 3.1 식약처(MFDS) 데이터 가공
 
-**주장**: 식품안전나라(food.go.kr) 영양성분 DB(약 25만 건)에서 식품군 대표성을 유지하는 샘플링으로 2,524건을 선별하고, 칼로리·탄수화물·단백질·지방·나트륨 등 핵심 영양소가 완비된 항목만 기초 DB(food_master)로 등록했다. 이후 프랜차이즈 메뉴 871건을 추가하여 실제 외식 환경을 반영했다.
+**주장**: 식품안전나라(food.go.kr) 영양성분 DB(약 25만 건)에서 식품군 대표성을 유지하는 샘플링으로 2,524건을 선별하고, 칼로리·탄수화물·단백질·지방·나트륨 등 핵심 영양소가 완비된 항목만 기초 DB(food_master)로 등록했다. 이후 외식·편의점·카페 메뉴 871건을 추가하여 실제 외식 환경을 반영했다.
 
 **표**: 논문 본문에 마크다운 표로 직접 삽입 (캡션: "데이터 수집 및 정제 파이프라인 개요: 단계별 처리 내용·도구·행수 변화")
 
@@ -23,7 +23,7 @@
 |------|---------|------|:--------:|:--------:|---------|
 | Step 0 | 식약처 식품영양성분 DB → food_master BULK COPY | Supabase | 2,524 | 2,522 | (product_name, brand_name) 중복 제거 |
 | Step 0b | 프랜차이즈 메뉴 CSV → food_master INSERT | Gemini 2.5 Flash-Lite | 871 | 850 | 알레르기 22종 JSONB 파싱 |
-| Step 1/1b | Naver Shopping API + HACCP API → 가격·알레르기 | Naver API / Gemini 2.5F | 2,522 | 2,520 | price + allergens UPDATE |
+| Step 1/1b | Naver Shopping API + HACCP API → 가격·알레르기 | Naver API / Gemini 2.5F | 2,522 | 2,522 | 2,520건 price+allergens UPDATE 성공 (2건 미반영) |
 | Step 1c | 프랜차이즈 가격 재조회 (Naver webkr → Gemini) | Naver API / Gemini 2.5F | 846 | 564 | price UPDATE (현재가 반영) |
 | Step 2 | LLM 식사 카테고리 분류 (5-class) | Gemini 2.5 Flash-Lite | 3,372 | 3,372 | category_type 태깅 |
 | Step 2b | 영양성분 불량 행 삭제 | SQL | 3,372 | 3,358 | 칼로리 < 5 kcal 등 14행 삭제 |
@@ -31,7 +31,7 @@
 | Step 6 | 식문화 분류 (7-class) | Gemini 2.5 Flash | 2,183 | 2,183 | cuisine_type 태깅 |
 
 - 강조 포인트:
-  - Step 0(식약처 2,524행) → Step 0b(프랜차이즈 871행 추가) → Step 1/1b/1c(가격·알레르기 증강) → Step 2(분류) → 최종 3,358행의 흐름이 한눈에 보이도록
+  - Step 0(식약처 2,524행) → Step 0b(외식·편의점 871행 추가) → Step 1/1b/1c(가격·알레르기 증강) → Step 2(분류) → 최종 3,358행의 흐름이 한눈에 보이도록
   - 각 단계에서 API·LLM이 어떻게 결합되는지 도구 열에 명시
   - 중간 행수 변화(2,522 → 3,372 → 3,358)가 왜 발생했는지 처리 내용 열에서 파악 가능하도록
 
@@ -43,19 +43,24 @@
 
 ### 3.2 프랜차이즈 데이터 크롤링
 
-**주장**: 식약처 공개 DB는 가공식품 영양성분 위주로 구성되어 실제 외식 환경(프랜차이즈 메뉴)을 대표하지 못한다. 맥도날드·롯데리아·버거킹·맘스터치·서브웨이·샐러디·프레퍼스 6개사의 메뉴 영양성분·가격·알레르기 정보를 HTML/Excel 크롤링으로 추가 수집하여 현실적 식단 구성을 가능하게 했다.
+**주장**: 식약처 공개 DB는 가공식품 영양성분 위주로 구성되어 실제 외식 환경을 대표하지 못한다. 패스트푸드(맥도날드·롯데리아·버거킹·맘스터치·서브웨이), 건강식(샐러디·프레퍼스), 편의점(CU·GS25·이마트24), 카페(스타벅스) 등 11개사의 메뉴 영양성분·가격·알레르기 정보를 HTML/Excel/CSV 크롤링으로 추가 수집하여 현실적 식단 구성을 가능하게 했다.
 
-**표**: 논문 본문에 마크다운 표로 직접 삽입 (캡션: "프랜차이즈 7개사 데이터 수집 개요: 수집 방식·항목 수·가격·알레르기 출처")
+**표**: 논문 본문에 마크다운 표로 직접 삽입 (캡션: "외식·편의점 데이터 수집 개요: 주요 브랜드별 수집 방식·항목 수·가격·알레르기 출처")
 
 | 브랜드 | 수집 방식 | 항목 수 | 가격 출처 | 알레르기 출처 |
 |--------|---------|:------:|---------|------------|
-| 맥도날드 | HTML 크롤링 | ~90 | Naver Shopping API | HACCP API |
-| 롯데리아 | HTML 크롤링 | ~70 | Naver Shopping API | HACCP API |
-| 버거킹 | CSV (수동 수집) | ~100 | Naver Shopping API | HACCP API |
-| 맘스터치 | Excel 크롤링 | ~80 | Naver Shopping API | HACCP API |
-| 서브웨이 | Excel 크롤링 | ~60 | Naver Shopping API | HACCP API |
-| 샐러디 | Excel 크롤링 | ~50 | Naver Shopping API | HACCP API |
-| 프레퍼스 | Excel 크롤링 | ~50 | Naver Shopping API | HACCP API |
+| CU | CSV (수동 수집) | 192 | Naver Shopping API | HACCP API |
+| 버거킹 | CSV (수동 수집) | 190 | Naver Shopping API | HACCP API |
+| 맥도날드 | HTML 크롤링 | 111 | Naver Shopping API | HACCP API |
+| 롯데리아 | HTML 크롤링 | 104 | Naver Shopping API | HACCP API |
+| GS25 | CSV (수동 수집) | 64 | Naver Shopping API | HACCP API |
+| 이마트24 | CSV (수동 수집) | 36 | Naver Shopping API | HACCP API |
+| 서브웨이 | Excel 크롤링 | 38 | Naver Shopping API | HACCP API |
+| 샐러디 | Excel 크롤링 | 34 | Naver Shopping API | HACCP API |
+| 스타벅스 | CSV (수동 수집) | 22 | Naver Shopping API | HACCP API |
+| 맘스터치 | Excel 크롤링 | 22 | Naver Shopping API | HACCP API |
+| 프레퍼스 | Excel 크롤링 | 21 | Naver Shopping API | HACCP API |
+| 기타 | — | 11 | — | — |
 
 - 강조 포인트:
   - 가격은 공식 사이트 크롤링값을 기초로 하되, Step 1c에서 Naver Shopping API로 재검증(현재가 반영)
@@ -95,7 +100,7 @@
 - 캡션 초안: "food_master 3,358건의 (a) 카테고리 분포 및 (b) 식문화 분포"
 - 강조 포인트:
   - (a) 카테고리: SNACK이 가장 많으나(1,101), MAIN·SIDE·DRINK 균형 있는 분포 → 식단 최적화에 충분한 선택지 확보
-  - (b) 식문화: 한식(663)·양식(448) 편중, 중식(33)·일식(31)·분식(90) 소수 → Sec 6.6에서 메뉴 풀 부족이 성능 병목으로 확인됨을 예고
+  - (b) 식문화: 한식(663)·양식(453) 편중, 중식(33)·일식(33)·분식(90) 소수 → Sec 6.6에서 메뉴 풀 부족이 성능 병목으로 확인됨을 예고
 
 **서술 방향**:
 - LLM 분류(Gemini 2.5 Flash-Lite) 성공률 100%(3,372/3,372) — 체크포인트 기반 재개로 중단 없이 완료
@@ -105,7 +110,7 @@
 
 ### 3.4 LLM + API 가격·영양 추론 및 태깅
 
-**주장**: Naver Shopping API(가격)와 HACCP API(알레르기 원재료명)를 결합하고, Gemini LLM으로 비정형 검색 결과에서 가격·22종 알레르기를 파싱했다. 최종 가격 커버리지는 67.7%(2,273/3,358)이며, 이상치는 카테고리별 Tukey's Fence(IQR×1.5)로 독립 처리해 신뢰성을 확보했다.
+**주장**: Naver Shopping API(가격)와 HACCP API(알레르기 원재료명)를 결합하고, Gemini LLM으로 비정형 검색 결과에서 가격·22종 알레르기를 파싱했다. 최종 가격 커버리지는 65.0%(2,183/3,358)이며, 이상치는 카테고리별 Tukey's Fence(IQR×1.5)로 독립 처리해 신뢰성을 확보했다.
 
 **표**: 논문 본문에 마크다운 표로 직접 삽입 (캡션: "카테고리별 Tukey's Fence (IQR×1.5) 적용 결과: 하한 500원 고정, HIGH 126개 + LOW 16개 → NULL 처리")
 
@@ -127,7 +132,7 @@
 - 알레르기 22종 기준: 한국 공식 표준(시행규칙 별표 2) 19종에 아몬드·캐슈넛·키위 3종을 추가하여 22종 적용.
   **본문 한 문장**: "국내 소아 즉시형 식품알레르기 유발 순위에서 아몬드(10위)·키위(12위)·캐슈넛(20위)이 법정 표시 대상에 포함되지 않음이 지적된 바 있어(Jung et al., Allergy Asthma Respir Dis, 2019), 본 연구에서는 이 3종을 추가한 22종을 알레르기 필터링 기준으로 적용하였다."
 - 캐시 전략: `data/raw/search_cache/{id}.json` 저장으로 API 재호출 방지 (25,000/일 한도 내 운영)
-- 가격 NULL 처리 방침: 가격 미확인 항목(1,085개)은 실험 데이터 풀에서 제외 → 가격이 확인된 2,273건만 최적화에 사용. f3 계산 시 분모 오염 없음
+- 가격 NULL 처리 방침: 가격 미확인 항목(1,175개)은 실험 데이터 풀에서 제외 → 가격이 확인된 2,183건만 최적화에 사용. f3 계산 시 분모 오염 없음
 
 ---
 
@@ -152,4 +157,4 @@
 - [x] 식약처 공개 데이터: 식품의약품안전처, 「식품영양성분 데이터베이스」, 식품안전나라(foodsafetykorea.go.kr/fcdb). 인용 시 접근일 명시 필요
 - [x] MealRec: arXiv:2205.12133 (2022, SIGIR 정식 proceedings 미확인 — arXiv preprint으로 인용). MealRec+: SIGIR 2024, DOI:10.1145/3626772.3657857. Korean Diet Score: PMC3572226
 - [x] 알레르기 22종 확장 근거: Jung et al., Allergy Asthma Respir Dis, 2019 (DOI:10.4168/aard.2019.7.2.67) — 아몬드(10위)·키위(12위)·캐슈넛(20위). 본문 한 문장 확정 (3.4 서술 방향 참조)
-- [x] 가격 NULL 1,085개 → 실험 풀에서 제외. f3는 가격 확인된 2,273건만으로 계산 (Sec 4 f3 서술과 정합)
+- [x] 가격 NULL 1,175개 → 실험 풀에서 제외. f3는 가격 확인된 2,183건만으로 계산 (Sec 4 f3 서술과 정합)
