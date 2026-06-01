@@ -823,75 +823,64 @@ def sec2_kg_concept(out_dir: Path) -> None:
 
     G = nx.DiGraph()
 
-    # 노드 정의
+    # 노드 정의 — 카테고리·식문화는 노드로 표현하지 않고 본문에서 기술
     nodes = {
-        "User A":       {"type": "user"},
-        "Doenjang-\njjigae": {"type": "food"},
-        "Bibimbap":     {"type": "food"},
-        "SOUP":         {"type": "category"},
-        "MAIN":         {"type": "category"},
-        "Korean":       {"type": "cuisine"},
+        "User A": {"type": "user"},
+        "Menu 1": {"type": "food"},
+        "Menu 2": {"type": "food"},
     }
     for n in nodes:
         G.add_node(n)
 
     # 엣지 정의: (head, tail, label)
     edges = [
-        ("User A",        "Doenjang-\njjigae", "ate (w=0.8)"),
-        ("User A",        "Bibimbap",           "ate (w=0.6)"),
-        ("Doenjang-\njjigae", "SOUP",           "category"),
-        ("Doenjang-\njjigae", "Korean",         "cuisine"),
-        ("Bibimbap",      "MAIN",               "category"),
-        ("Bibimbap",      "Korean",             "cuisine"),
+        ("User A", "Menu 1", "ate (w=0.8)"),
+        ("User A", "Menu 2", "ate (w=0.6)"),
     ]
     for h, t, lbl in edges:
         G.add_edge(h, t, label=lbl)
 
     # 레이아웃 — 수동 위치 지정
     pos = {
-        "User A":           (0.5, 1.0),
-        "Doenjang-\njjigae": (0.15, 0.45),
-        "Bibimbap":         (0.85, 0.45),
-        "SOUP":             (0.0, 0.0),
-        "MAIN":             (1.0, 0.0),
-        "Korean":           (0.5, 0.0),
+        "User A": (0.5, 0.85),
+        "Menu 1": (0.15, 0.15),
+        "Menu 2": (0.85, 0.15),
     }
 
-    node_colors_map = {"user": "#aed6f1", "food": "#a9dfbf", "category": "#f9e79f",
-                       "cuisine": "#f5cba7"}
+    node_colors_map = {"user": "#aed6f1", "food": "#a9dfbf"}
     node_color = [node_colors_map[nodes[n]["type"]] for n in G.nodes()]
-    node_size  = [1200 if nodes[n]["type"] == "user" else 900 for n in G.nodes()]
+    node_size  = [1400 if nodes[n]["type"] == "user" else 1000 for n in G.nodes()]
 
-    fig, ax = plt.subplots(figsize=(DOUBLE_W * 0.75, 3.2))
+    fig, ax = plt.subplots(figsize=(DOUBLE_W * 0.55, 3.0))
     ax.axis("off")
+    ax.set_xlim(-0.1, 1.1)
+    ax.set_ylim(-0.05, 1.05)
 
     nx.draw_networkx_nodes(G, pos, ax=ax, node_color=node_color,
                            node_size=node_size, edgecolors="#555555", linewidths=0.8)
-    nx.draw_networkx_labels(G, pos, ax=ax, font_size=7.5, font_weight="bold")
+    nx.draw_networkx_labels(G, pos, ax=ax, font_size=8.5, font_weight="bold")
     nx.draw_networkx_edges(G, pos, ax=ax,
                            edge_color="#666666", arrows=True,
-                           arrowstyle="-|>", arrowsize=14,
+                           arrowstyle="-|>", arrowsize=16,
                            connectionstyle="arc3,rad=0.08",
-                           min_source_margin=18, min_target_margin=18,
-                           width=0.9)
+                           min_source_margin=20, min_target_margin=20,
+                           width=1.1)
     edge_labels = {(h, t): lbl for h, t, lbl in edges}
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, ax=ax,
-                                 font_size=6.2, label_pos=0.45,
-                                 bbox=dict(boxstyle="round,pad=0.1",
-                                           fc="white", ec="none", alpha=0.8))
+                                 font_size=7.5, label_pos=0.5,
+                                 bbox=dict(boxstyle="round,pad=0.15",
+                                           fc="white", ec="none", alpha=0.85))
 
     # 범례
     legend_patches = [
         mpatches.Patch(facecolor="#aed6f1", edgecolor="#555", label="User"),
-        mpatches.Patch(facecolor="#a9dfbf", edgecolor="#555", label="Food"),
-        mpatches.Patch(facecolor="#f9e79f", edgecolor="#555", label="Category"),
-        mpatches.Patch(facecolor="#f5cba7", edgecolor="#555", label="Cuisine"),
+        mpatches.Patch(facecolor="#a9dfbf", edgecolor="#555", label="Food (Menu)"),
     ]
-    ax.legend(handles=legend_patches, loc="lower right", fontsize=7,
-              frameon=True, title="Node Type", title_fontsize=7)
+    ax.legend(handles=legend_patches, loc="upper right", fontsize=7.5,
+              frameon=True, title="Node Type", title_fontsize=7.5)
 
     ax.set_title("Knowledge Graph Structure Example\n"
-                 "(User–Food interaction with preference weights)",
+                 "(User–Menu interaction with preference weights)",
                  fontsize=9, pad=8)
 
     out_path = out_dir / "fig_kg_concept.png"
@@ -1080,9 +1069,7 @@ def sec3_distribution_chart(out_dir: Path) -> None:
     }
     cuisine_data = {
         "Korean":   663,
-        "Café":     525,
         "Western":  448,
-        "Other":    386,
         "Bunsik":    90,
         "Chinese":   33,
         "Japanese":  31,
@@ -1090,8 +1077,11 @@ def sec3_distribution_chart(out_dir: Path) -> None:
 
     cat_colors_list = ["#9467bd", "#1f77b4", "#2ca02c", "#ff7f0e", "#d62728"]
     cuisine_colors_list = [
-        "#1f77b4", "#8c564b", "#ff7f0e", "#7f7f7f",
-        "#2ca02c", "#d62728", "#9467bd",
+        "#1f77b4",  # Korean
+        "#ff7f0e",  # Western
+        "#2ca02c",  # Bunsik
+        "#d62728",  # Chinese
+        "#9467bd",  # Japanese
     ]
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(DOUBLE_W, 3.2))
@@ -1105,7 +1095,7 @@ def sec3_distribution_chart(out_dir: Path) -> None:
         ax1.text(bar.get_width() + 15, bar.get_y() + bar.get_height() / 2,
                  str(val), va="center", fontsize=8)
     ax1.set_xlabel("Item Count")
-    ax1.set_title("(a) Category Distribution")
+    ax1.set_title("(a) Category Distribution\n", pad=10)
     ax1.set_xlim(0, max(cat_vals) * 1.18)
     ax1.invert_yaxis()
 
@@ -1117,11 +1107,12 @@ def sec3_distribution_chart(out_dir: Path) -> None:
         ax2.text(bar.get_width() + 10, bar.get_y() + bar.get_height() / 2,
                  str(val), va="center", fontsize=8)
     ax2.set_xlabel("Item Count")
-    ax2.set_title("(b) Cuisine Distribution\n(price-tagged items, n=2,183)")
+    ax2.set_title("(b) Cuisine Distribution\n(experiment cuisines, n=1,265)", pad=10)
     ax2.set_xlim(0, max(cuisine_vals) * 1.22)
     ax2.invert_yaxis()
 
-    fig.suptitle("food_master Dataset Distribution (total 3,358 items)", fontsize=11, y=1.02)
+    fig.suptitle("food_master Dataset Distribution (total 3,358 items)", fontsize=11, y=1.06)
+    fig.subplots_adjust(top=0.82)
     out_path = out_dir / "fig_dataset_distribution.png"
     fig.savefig(out_path, dpi=DPI, bbox_inches="tight", facecolor="white")
     plt.close(fig)
