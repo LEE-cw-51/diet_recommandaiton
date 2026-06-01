@@ -35,7 +35,7 @@
 | [sec6_results/fig1_g1_g2_boxplot.png](sec6_results/fig1_g1_g2_boxplot.png) | G1 vs G2: HV·GD+·IGD+ 박스플롯 + Wilcoxon 유의성 표시 |
 | [sec6_results/fig2_g1_g2_convergence.png](sec6_results/fig2_g1_g2_convergence.png) | G1 vs G2: 세대별 HV 수렴 곡선 (30회 평균 ± std) |
 | [sec6_results/fig3_pareto_scatter.png](sec6_results/fig3_pareto_scatter.png) | G1/G2/G3 파레토 전선 산점도 (f1-f2, f1-f3, f2-f3 3쌍 투영) |
-| [sec6_results/fig4_g3_f4_coldstart.png](sec6_results/fig4_g3_f4_coldstart.png) | Cold Start: KG 초기화 전후 f4 비교 (0.25 → 0.042, 83% 감소) |
+| [sec6_results/fig4_g3_f4_coldstart.png](sec6_results/fig4_g3_f4_coldstart.png) | Cold Start: KG 초기화 전후 f4 비교 (0.25 → 0.028, 89% 감소 (Day 7 기준)) |
 | [sec6_results/fig5_korean_7days.png](sec6_results/fig5_korean_7days.png) | 한식 Loop B: 7일간 f4 추이 + 중복률 (Day 6~7 시간 감쇠 회복 확인) |
 | [sec6_results/fig5_western_7days.png](sec6_results/fig5_western_7days.png) | 양식 Loop B: 7일간 f4 추이 + 중복률 (Day 7 시간 감쇠 회복 확인) |
 | [sec6_results/fig6_g2_vs_g3_3d.png](sec6_results/fig6_g2_vs_g3_3d.png) | G2 vs G3: f1/f2/f3 3D 투영 비교 (KG 추가가 기존 3목적 품질을 해치지 않음을 입증) |
