@@ -315,7 +315,7 @@ def fig4_coldstart(out_dir: Path) -> None:
     ax.set_title("Cold Start: f4 Before vs After Initialization")
     ax.set_xticks(df.day)
 
-    # 83% reduction 주석
+    # 89% reduction 주석 (Day 7 기준)
     f4_end = df.f4_after.iloc[-1]
     f4_start = df.f4_before.iloc[0]
     reduction = (f4_start - f4_end) / f4_start * 100
