@@ -356,6 +356,54 @@ def plot_metrics_bar(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# G2 vs G3_proj Pareto front 시각화 (f1-f2-f3 3D 투영)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def plot_g2_g3proj_pareto(out_dir: Path, groups: dict, p_vals_g2g3: dict) -> None:
+    """G2와 G3(f4 제거, 3D 투영)의 파레토 프론트를 f1-f2-f3 평면 쌍으로 시각화.
+
+    3개의 2D 투영 (f1-f2 / f1-f3 / f2-f3)을 한 figure에 나란히 배치.
+    """
+    if not HAS_MPL:
+        return
+
+    import matplotlib.pyplot as plt
+
+    # 각 그룹의 30회 파레토 해를 모두 합산
+    F_g2 = np.vstack([F for F in groups["G2"]["F_list"] if len(F) > 0])
+    # G3 4D → 3D 투영
+    F_g3 = np.vstack([F[:, :3] for F in groups["G3"]["F_list"] if len(F) > 0])
+
+    axis_labels = ["f1 (Calorie Dev.)", "f2 (Nutrition Dev.)", "f3 (Price Dev.)"]
+    pairs = [(0, 1), (0, 2), (1, 2)]
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig.suptitle(
+        "G2 vs G3_proj Pareto Front (f1-f2-f3 투영, 30회 합산)\n"
+        f"Wilcoxon: HV p={p_vals_g2g3.get(('G2','G3_proj','HV'), float('nan')):.4f}  "
+        f"GD+ p={p_vals_g2g3.get(('G2','G3_proj','GD+'), float('nan')):.4f}  "
+        f"IGD+ p={p_vals_g2g3.get(('G2','G3_proj','IGD+'), float('nan')):.4f}",
+        fontsize=11,
+    )
+
+    for ax, (xi, yi) in zip(axes, pairs):
+        ax.scatter(F_g2[:, xi], F_g2[:, yi],
+                   s=8, alpha=0.4, color="#2196F3", label="G2 (R-NSGA-II)")
+        ax.scatter(F_g3[:, xi], F_g3[:, yi],
+                   s=8, alpha=0.4, color="#FF9800", label="G3 (f4 excl.)")
+        ax.set_xlabel(axis_labels[xi], fontsize=9)
+        ax.set_ylabel(axis_labels[yi], fontsize=9)
+        ax.legend(fontsize=8, markerscale=2)
+        ax.grid(True, linewidth=0.3)
+
+    plt.tight_layout()
+    path = out_dir / "plot_g2_g3proj_pareto.png"
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  🖼  {path.name}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 아티팩트 로드 → 전체 렌더
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -379,10 +427,16 @@ def render_from_dir(out_dir: Path) -> None:
     n_gen     = payload["meta"]["n_gen"]
 
     plot_convergence(out_dir, groups, nadir_map, n_gen)
-    plot_metrics_boxplot(out_dir, metrics, p_vals)
-    plot_metrics_bar(out_dir, metrics, p_vals)
+    # G1/G2/G3 전체 비교 그래프는 G1이 있을 때만 (--skip_g1 시 생략)
+    if "G1" in metrics:
+        plot_metrics_boxplot(out_dir, metrics, p_vals)
+        plot_metrics_bar(out_dir, metrics, p_vals)
     if daily_logs:
         plot_7days_f4(out_dir, daily_logs)
+    # G2 vs G3_proj 파레토 시각화 (G3가 있을 때만)
+    if "G3" in groups and "G2" in groups:
+        p_vals_g2g3 = payload.get("p_vals_g2g3", {})
+        plot_g2_g3proj_pareto(out_dir, groups, p_vals_g2g3)
 
 
 def main() -> None:
