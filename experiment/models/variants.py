@@ -45,5 +45,5 @@ GROUP_COLORS = {"G1": "#e74c3c", "G2": "#2980b9", "G3": "#27ae60"}
 GROUP_LABELS = {
     "G1": "G1: NSGA-II (3-obj, no KG)",
     "G2": "G2: R-NSGA-II (3-obj, no KG)",
-    "G3": "G3: R-NSGA-II + KG (4-obj, Proposed)",
+    "G3": "G3: R-NSGA-II + KG (f1–f3 proj., Proposed)",
 }

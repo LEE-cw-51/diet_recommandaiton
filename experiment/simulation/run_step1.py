@@ -70,8 +70,12 @@ def run_loop_a(
     n_runs: int,
     pop_size: int,
     n_gen: int,
+    skip_g1: bool = False,
 ) -> dict[str, dict]:
-    """G1/G2/G3 각 n_runs회 실행. KG는 업데이트하지 않음 (단일 날 고정 상태)."""
+    """G1/G2/G3 각 n_runs회 실행. KG는 업데이트하지 않음 (단일 날 고정 상태).
+
+    skip_g1=True 시 G1(NSGA-II) 건너뜀 — G2/G3 비교만 필요할 때.
+    """
     from experiment.core.daily_exp3_problem import DailyExp3Problem
     from experiment.core.nutrition import NutritionProfile
 
@@ -113,6 +117,10 @@ def run_loop_a(
         ("G2", problem_3obj, lambda: make_rnsga2(pop_size, REF_G2)),
         ("G3", problem_4obj, lambda: make_rnsga2(pop_size, REF_G3)),
     ]
+    if skip_g1:
+        algo_defs = [(n, p, a) for n, p, a in algo_defs if n != "G1"]
+        print("  ⏭ G1(NSGA-II) 건너뜀 (--skip_g1)")
+        groups.pop("G1")
 
     for run_idx in range(n_runs):
         seed = SEED_START + run_idx
@@ -165,6 +173,143 @@ def compute_loop_a_metrics(
             "times": gdata["times"],
         }
     return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# G2 vs G3_proj (f4 제거 후 3D 투영) 공정 비교
+# ──────────────────────────────────────────────────────────────────────────────
+
+def compute_g2_g3proj_comparison(
+    groups: dict[str, dict],
+) -> tuple[dict[str, dict], dict[str, np.ndarray], dict[str, np.ndarray], dict]:
+    """G3의 f4를 제거해 3D로 투영한 뒤 G2와 동일 reference front로 지표 재계산.
+
+    Returns:
+        metrics_g2g3  — G2 / G3_proj 각 30개 HV/GD+/IGD+
+        ref_map       — {"G2": ref_g2g3, "G3_proj": ref_g2g3}
+        nadir_map     — 동일 nadir
+        p_vals        — Wilcoxon G2 vs G3_proj
+    """
+    from experiment.core.metrics import compute_reference_pf
+    from scipy.stats import ranksums
+
+    # G3 4D → 3D 투영 (f4 열 제거)
+    G3_proj_F_list = [F[:, :3] for F in groups["G3"]["F_list"] if len(F) > 0]
+
+    # G2 + G3_proj 합병 → 공용 3D reference front
+    F_g2g3 = np.vstack(
+        [F for F in groups["G2"]["F_list"] if len(F) > 0] + G3_proj_F_list
+    )
+    ref_g2g3   = compute_reference_pf(F_g2g3)
+    nadir_g2g3 = F_g2g3.max(axis=0) * 1.1
+
+    ref_map   = {"G2": ref_g2g3, "G3_proj": ref_g2g3}
+    nadir_map = {"G2": nadir_g2g3, "G3_proj": nadir_g2g3}
+
+    # G3_proj 그룹 구성 (times는 원본 G3 기준)
+    groups_g2g3 = {
+        "G2":      groups["G2"],
+        "G3_proj": {
+            "F_list": G3_proj_F_list,
+            "times":  groups["G3"]["times"],
+        },
+    }
+
+    # 지표 재계산
+    metrics_g2g3 = compute_loop_a_metrics(groups_g2g3, ref_map, nadir_map)
+
+    # Wilcoxon G2 vs G3_proj
+    p_vals: dict[tuple, float] = {}
+    for metric_key, label in [("hv", "HV"), ("gdp", "GD+"), ("igdp", "IGD+")]:
+        a = [x for x in metrics_g2g3["G2"][metric_key]      if not np.isnan(x)]
+        b = [x for x in metrics_g2g3["G3_proj"][metric_key] if not np.isnan(x)]
+        if len(a) >= 3 and len(b) >= 3:
+            _, p = ranksums(a, b)
+            p_vals[("G2", "G3_proj", label)] = float(p)
+        else:
+            p_vals[("G2", "G3_proj", label)] = np.nan
+
+    return metrics_g2g3, ref_map, nadir_map, p_vals
+
+
+def save_g2g3_comparison_csv(out_dir: Path, metrics_g2g3: dict, p_vals: dict, n_runs: int) -> None:
+    """G2 vs G3_proj 비교 결과를 두 개의 CSV로 저장.
+
+    - per_run_metrics_g2g3.csv : 각 run의 개별값 (G2 30행 + G3_proj 30행)
+    - metrics_g2g3_comparison.csv : 요약 통계 + Wilcoxon p-value
+    """
+    # ── per_run ────────────────────────────────────────────────────────────
+    perrun_path = out_dir / "per_run_metrics_g2g3.csv"
+    fieldnames  = ["group", "run_idx", "HV", "GD+", "IGD+", "time_sec"]
+    rows = []
+    for gname in ("G2", "G3_proj"):
+        g = metrics_g2g3[gname]
+        for i, (hv, gdp, igdp, t) in enumerate(
+            zip(g["hv"], g["gdp"], g["igdp"], g["times"])
+        ):
+            rows.append({
+                "group":    gname,
+                "run_idx":  i,
+                "HV":       f"{hv:.6f}"   if not np.isnan(hv)   else "nan",
+                "GD+":      f"{gdp:.6f}"  if not np.isnan(gdp)  else "nan",
+                "IGD+":     f"{igdp:.6f}" if not np.isnan(igdp) else "nan",
+                "time_sec": f"{t:.3f}",
+            })
+    with open(perrun_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        w.writerows(rows)
+    print(f"  💾 {perrun_path.name}")
+
+    # ── 요약 ───────────────────────────────────────────────────────────────
+    summary_path = out_dir / "metrics_g2g3_comparison.csv"
+    fieldnames2  = ["group", "metric", "mean", "std", "min", "max", "wilcoxon_p", "n_runs"]
+    rows2 = []
+    for gname in ("G2", "G3_proj"):
+        g = metrics_g2g3[gname]
+        for metric_key, label in [("hv", "HV"), ("gdp", "GD+"), ("igdp", "IGD+")]:
+            vals = [x for x in g[metric_key] if not np.isnan(x)]
+            p    = p_vals.get(("G2", "G3_proj", label), np.nan)
+            rows2.append({
+                "group":       gname,
+                "metric":      label,
+                "mean":        f"{np.mean(vals):.6f}" if vals else "nan",
+                "std":         f"{np.std(vals):.6f}"  if vals else "nan",
+                "min":         f"{np.min(vals):.6f}"  if vals else "nan",
+                "max":         f"{np.max(vals):.6f}"  if vals else "nan",
+                "wilcoxon_p":  f"{p:.4f}" if not np.isnan(p) else "nan",
+                "n_runs":      n_runs,
+            })
+    with open(summary_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames2)
+        w.writeheader()
+        w.writerows(rows2)
+    print(f"  💾 {summary_path.name}")
+
+
+def print_g2g3_summary(metrics_g2g3: dict, p_vals: dict) -> None:
+    """G2 vs G3_proj 비교 결과 콘솔 출력."""
+    print("\n" + "=" * 65)
+    print("  📊 G2 vs G3_proj (f4 제거 후 3D 투영) 비교")
+    print("  귀무가설 H₀: G2와 G3_proj의 분포가 동일하다 (양측검정)")
+    print("=" * 65)
+    for gname in ("G2", "G3_proj"):
+        g = metrics_g2g3[gname]
+        label = "G3 (f4 제거, 3D 투영)" if gname == "G3_proj" else "G2 (R-NSGA-II, 3D)"
+        print(
+            f"  {label}: "
+            f"HV={np.nanmean(g['hv']):.4f}±{np.nanstd(g['hv']):.4f}  "
+            f"GD+={np.nanmean(g['gdp']):.4f}±{np.nanstd(g['gdp']):.4f}  "
+            f"IGD+={np.nanmean(g['igdp']):.4f}±{np.nanstd(g['igdp']):.4f}"
+        )
+    print("\n  📈 Wilcoxon rank-sum test (G2 vs G3_proj, 동일 3D 공간)")
+    for label in ("HV", "GD+", "IGD+"):
+        p = p_vals.get(("G2", "G3_proj", label), np.nan)
+        if np.isnan(p):
+            print(f"    G2 vs G3_proj [{label}]: p=nan")
+        else:
+            sig = "✅ p<0.05 (유의)" if p < 0.05 else "❌ n.s. (차이 없음)"
+            print(f"    G2 vs G3_proj [{label}]: p={p:.4f}  {sig}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -439,7 +584,7 @@ def print_summary(metrics: dict[str, dict], p_vals: dict) -> None:
         else:
             sig = "✅ p<0.05" if p < 0.05 else "❌ n.s."
             print(f"      G1 vs G2 [{label}]: p={p:.4f}  {sig}")
-    print("    [vs G3] 차원 다름(3D↔4D) — HV 절대값 비교는 단위 다름 caveat")
+    print("    [vs G3] G3는 f4 제외 후 3D 투영 — 동일 ref_front 기준으로 공정 비교")
     for base in ("G1", "G2"):
         for label in ("HV", "GD+", "IGD+"):
             p = p_vals.get((base, "G3", label), np.nan)
@@ -468,6 +613,8 @@ def main() -> None:
                         help="테스트 모드: pop=10, gen=20, runs=3, days=2")
     parser.add_argument("--skip_loop_b", action="store_true",
                         help="Loop B(7일 시뮬레이션) 건너뜀")
+    parser.add_argument("--skip_g1", action="store_true",
+                        help="G1(NSGA-II) 실행 생략 — G2/G3 비교만 필요할 때")
     parser.add_argument("--plot",        action="store_true",
                         help="계산 후 시각화까지 실행 (저장된 아티팩트를 로드해 그림 생성)")
     args = parser.parse_args()
@@ -514,36 +661,36 @@ def main() -> None:
         mains, sides_soup, drinks, snacks, kg_base,
         args.cal_star, args.price_star,
         args.n_runs, args.pop_size, args.n_gen,
+        skip_g1=args.skip_g1,
     )
 
-    # ── Reference Front & Nadir (그룹별 분리 — G1/G2는 3D, G3는 4D) ───────
-    print("\n  📐 Reference Front 계산 (G1+G2 합병 3D / G3 단독 4D)")
+    # ── Reference Front & Nadir — G3 f4 제거 후 G1+G2+G3 단일 3D ref ─────
+    print("\n  📐 Reference Front 계산 (G1+G2+G3_proj 합병 → 단일 3D)")
     from experiment.core.metrics import compute_reference_pf
 
-    # G1+G2: 3D ref_front (R-NSGA-II 순효과 비교용)
-    F_3d_list = [F for g in ("G1", "G2") for F in groups[g]["F_list"] if len(F) > 0]
-    # G3: 4D ref_front (KG 통합 모델 단독 평가)
-    F_4d_list = [F for F in groups["G3"]["F_list"] if len(F) > 0]
-    if not F_3d_list or not F_4d_list:
+    # G3: 4D → 3D 투영 (f4 열 제거) — 지표 계산 및 ref_front 모두 투영본 사용
+    groups["G3"]["F_list"] = [F[:, :3] for F in groups["G3"]["F_list"] if len(F) > 0]
+
+    # G1 + G2 + G3_proj 합병 → 단일 3D ref_front
+    groups_to_merge = ("G1", "G2", "G3") if not args.skip_g1 else ("G2", "G3")
+    all_F_3d = np.vstack(
+        [F for g in groups_to_merge for F in groups[g]["F_list"] if len(F) > 0]
+    )
+    if len(all_F_3d) == 0:
         print("⚠ 유효한 해 없음. 프로그램 종료.")
         return
 
-    all_F_3d  = np.vstack(F_3d_list)
     ref_3d    = compute_reference_pf(all_F_3d)
     nadir_3d  = all_F_3d.max(axis=0) * 1.1
+    ref_map   = {g: ref_3d   for g in groups}
+    nadir_map = {g: nadir_3d for g in groups}
 
-    all_F_4d  = np.vstack(F_4d_list)
-    ref_4d    = compute_reference_pf(all_F_4d)
-    nadir_4d  = all_F_4d.max(axis=0) * 1.1
-
-    ref_map   = {"G1": ref_3d,   "G2": ref_3d,   "G3": ref_4d}
-    nadir_map = {"G1": nadir_3d, "G2": nadir_3d, "G3": nadir_4d}
-
-    print(f"  ref_3d (G1/G2) 크기: {len(ref_3d)}해 / nadir_3d: {np.round(nadir_3d, 3)}")
-    print(f"  ref_4d (G3)    크기: {len(ref_4d)}해 / nadir_4d: {np.round(nadir_4d, 3)}")
+    print(f"  ref_3d ({'+'.join(groups_to_merge)}_proj) 크기: {len(ref_3d)}해")
+    print(f"  nadir_3d: {np.round(nadir_3d, 3)}")
+    print(f"  ※ G3 지표는 f4 제외 (f1·f2·f3) 기준으로 계산됨")
 
     # ── 지표 계산 & Wilcoxon ───────────────────────────────────────────────
-    print("\n  📊 GD+/IGD+/HV 계산 + Wilcoxon rank-sum test")
+    print("\n  📊 HV/GD+/IGD+ 계산 + Wilcoxon rank-sum test")
     metrics = compute_loop_a_metrics(groups, ref_map, nadir_map)
     p_vals  = compute_wilcoxon(metrics)
     print_summary(metrics, p_vals)
@@ -571,12 +718,12 @@ def main() -> None:
     # ── 아티팩트 저장 (시각화 재현용 — 알고리즘 재실행 방지) ──────────────
     print("\n  📦 아티팩트 저장 (시각화 재현용)")
     payload = {
-        "groups":     groups,
-        "nadir_map":  nadir_map,
-        "metrics":    metrics,
-        "p_vals":     p_vals,
+        "groups":        groups,
+        "nadir_map":     nadir_map,
+        "metrics":       metrics,
+        "p_vals":        p_vals,
         "pareto":     build_pareto_payload(groups),
-        "daily_logs": daily_logs,
+        "daily_logs":    daily_logs,
         "meta": {
             "n_gen":      args.n_gen,
             "pop_size":   args.pop_size,
